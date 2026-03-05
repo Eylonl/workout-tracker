@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Push/Pull">
+<title>Push / Pull Workout</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💪</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Outfit:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1114;
+    --card: #1a1d23;
+    --card-border: #2a2d35;
+    --text: #e8e8ec;
+    --text-dim: #6e7179;
+    --input-bg: #22252c;
+    --push-accent: #f0654a;
+    --push-glow: rgba(240, 101, 74, 0.15);
+    --pull-accent: #4a9ff0;
+    --pull-glow: rgba(74, 159, 240, 0.15);
+    --check-green: #3dd68c;
+    --section-bg: #15171c;
+    --danger: #e5484d;
+    --danger-glow: rgba(229, 72, 77, 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 1rem;
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: 6rem;
+    overscroll-behavior: none;
+  }
+
+  h1 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    text-align: center;
+    margin: 0.75rem 0;
+    letter-spacing: -0.02em;
+  }
+
+  /* Loading */
+  .loading-screen {
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 1rem;
+    min-height: 50vh; color: var(--text-dim); font-size: 0.9rem;
+  }
+  .spinner {
+    width: 28px; height: 28px; border: 3px solid var(--card-border);
+    border-top-color: var(--check-green); border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Mode Toggle */
+  .mode-bar { display: flex; justify-content: center; margin-bottom: 1.25rem; }
+  .mode-toggle {
+    display: flex; background: var(--card);
+    border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden;
+  }
+  .mode-btn {
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.8rem;
+    padding: 0.5rem 1.2rem; border: none; background: transparent;
+    color: var(--text-dim); cursor: pointer; transition: all 0.2s; letter-spacing: 0.02em;
+  }
+  .mode-btn.active { background: var(--check-green); color: var(--bg); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+  .tab {
+    flex: 1; padding: 0.7rem; border: 2px solid var(--card-border);
+    border-radius: 12px; background: var(--card); color: var(--text-dim);
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 1rem;
+    text-align: center; cursor: pointer; transition: all 0.25s;
+  }
+  .tab.active-push { border-color: var(--push-accent); color: var(--push-accent); background: var(--push-glow); }
+  .tab.active-pull { border-color: var(--pull-accent); color: var(--pull-accent); background: var(--pull-glow); }
+
+  /* Views */
+  .app-content { display: none; }
+  .app-content.ready { display: block; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .workout { display: none; }
+  .workout.active { display: block; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .section { margin-bottom: 1.25rem; }
+
+  .section-title {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 0.5rem;
+  }
+  .push-theme .section-title, .push-panel .section-title { color: var(--push-accent); background: var(--push-glow); }
+  .pull-theme .section-title, .pull-panel .section-title { color: var(--pull-accent); background: var(--pull-glow); }
+
+  /* Checklist Items */
+  .item {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.7rem 0.75rem; border-radius: 10px;
+    cursor: pointer; transition: background 0.15s;
+    -webkit-user-select: none; user-select: none;
+  }
+  .item:active { background: var(--section-bg); }
+
+  .checkbox {
+    flex-shrink: 0; width: 24px; height: 24px;
+    border: 2px solid var(--card-border); border-radius: 7px; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  }
+  .checkbox svg {
+    width: 14px; height: 14px; stroke: var(--bg); stroke-width: 3;
+    fill: none; opacity: 0; transform: scale(0.5); transition: all 0.2s;
+  }
+  .item.checked .checkbox { background: var(--check-green); border-color: var(--check-green); }
+  .item.checked .checkbox svg { opacity: 1; transform: scale(1); }
+
+  .item-content { flex: 1; }
+  .item-name { font-weight: 500; font-size: 0.95rem; line-height: 1.35; transition: opacity 0.2s; }
+  .item-detail { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; line-height: 1.3; }
+  .item.checked .item-name { opacity: 0.4; text-decoration: line-through; }
+  .item.checked .item-detail { opacity: 0.3; }
+
+  /* Progress */
+  .progress-bar { height: 4px; border-radius: 2px; background: var(--card); margin-bottom: 1.25rem; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; width: 0%; transition: width 0.35s ease; }
+  .push-theme .progress-fill { background: var(--push-accent); }
+  .pull-theme .progress-fill { background: var(--pull-accent); }
+
+  /* Bottom Bar */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    background: linear-gradient(transparent, var(--bg) 30%);
+    text-align: center; display: none;
+  }
+  .bottom-bar.active { display: block; }
+  .reset-btn {
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.85rem;
+    padding: 0.7rem 2rem; border: none; border-radius: 10px; cursor: pointer;
+    color: var(--text); background: var(--card); border: 1px solid var(--card-border);
+    letter-spacing: 0.03em; transition: all 0.2s;
+  }
+  .reset-btn:active { transform: scale(0.96); }
+
+  /* Editor */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+  .add-btn {
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.75rem;
+    padding: 0.35rem 0.7rem; border: 1px solid var(--card-border);
+    border-radius: 8px; background: var(--card); color: var(--text-dim);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .add-btn:active { background: var(--input-bg); }
+
+  .row {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 12px; padding: 0.65rem; margin-bottom: 0.5rem;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .row-top { display: flex; gap: 0.5rem; align-items: center; }
+  .row input {
+    flex: 1; font-family: 'DM Sans', sans-serif; font-size: 0.88rem;
+    padding: 0.5rem 0.65rem; border: 1px solid var(--card-border);
+    border-radius: 8px; background: var(--input-bg); color: var(--text);
+    outline: none; transition: border-color 0.2s; min-width: 0;
+  }
+  .row input:focus { border-color: #555; }
+  .row input::placeholder { color: var(--text-dim); }
+
+  .delete-btn {
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--card-border); border-radius: 8px;
+    background: var(--card); color: var(--danger);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 1.1rem; transition: all 0.2s;
+  }
+  .delete-btn:active { background: var(--danger-glow); }
+
+  .row-labels { display: flex; gap: 0.5rem; padding: 0 0.65rem 0.2rem; }
+  .row-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .row-label:first-child { flex: 1; }
+  .row-label:nth-child(2) { flex: 1; }
+  .row-label:last-child { width: 32px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 1rem; left: 50%; transform: translateX(-50%) translateY(-80px);
+    background: var(--check-green); color: var(--bg); font-weight: 700;
+    padding: 0.7rem 1.5rem; border-radius: 10px; font-size: 0.85rem;
+    opacity: 0; transition: all 0.35s ease; pointer-events: none; z-index: 99;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* Sync indicator */
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    margin-left: 8px; vertical-align: middle; transition: background 0.3s;
+  }
+  .sync-dot.synced { background: var(--check-green); }
+  .sync-dot.syncing { background: #f5a623; animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+</style>
+</head>
+<body>
+
+<h1>Push / Pull <span class="sync-dot syncing" id="sync-dot" title="Syncing..."></span></h1>
+
+<div class="loading-screen" id="loading">
+  <div class="spinner"></div>
+  <span>Loading workouts...</span>
+</div>
+
+<div class="app-content" id="app">
+  <div class="mode-bar">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-workout" onclick="setMode('workout')">Workout</button>
+      <button class="mode-btn" id="mode-edit" onclick="setMode('edit')">Edit</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab" id="tab-push" onclick="switchTab('push')">Push</div>
+    <div class="tab" id="tab-pull" onclick="switchTab('pull')">Pull</div>
+  </div>
+
+  <div class="view active" id="view-workout">
+    <div class="workout push-theme active" id="workout-push">
+      <div class="progress-bar"><div class="progress-fill" id="progress-push"></div></div>
+    </div>
+    <div class="workout pull-theme" id="workout-pull">
+      <div class="progress-bar"><div class="progress-fill" id="progress-pull"></div></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-edit">
+    <div class="panel push-panel active" id="panel-push"></div>
+    <div class="panel pull-panel" id="panel-pull"></div>
+  </div>
+</div>
+
+<div class="bottom-bar active" id="bar-workout">
+  <button class="reset-btn" onclick="resetAll()">Reset All Checks</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── FIREBASE CONFIG ───
+var FIREBASE_URL = 'https://workout-tracker-99-default-rtdb.firebaseio.com';
+
+function fbGet(path) {
+  return fetch(FIREBASE_URL + '/' + path + '.json')
+    .then(function(r) { return r.json(); });
+}
+
+function fbSet(path, data) {
+  return fetch(FIREBASE_URL + '/' + path + '.json', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); });
+}
+
+// ─── DEFAULT DATA ───
+var defaultData = {
+  push: [
+    { section: "Warm-Up", items: [
+      { name: "Leg Side to Side", detail: "" },
+      { name: "Crunch with Stomach Up", detail: "" },
+      { name: "Windshield", detail: "" },
+      { name: "Best Stretch in the World", detail: "" },
+      { name: "Superman", detail: "" },
+      { name: "Banded Pull Apart", detail: "" }
+    ]},
+    { section: "Push Exercises", items: [
+      { name: "Box Squats", detail: "Hold weight upside down, tap on bench — 50 lbs" },
+      { name: "Dumbbell Chest Press", detail: "Bench, lie on back — 20 lbs" },
+      { name: "Chest Fly Machine", detail: "Back to machine, deep stretch — 40 lbs" },
+      { name: "Single Arm Push Press", detail: "Legs one behind the other — 17.5 lbs" },
+      { name: "Single Leg Press", detail: "Left toe pointed out — 25 lbs" },
+      { name: "Plank", detail: "3 sets, 30–60 seconds" }
+    ]},
+    { section: "Post", items: [
+      { name: "Shoulder Stretch on Wall", detail: "" },
+      { name: "90/90 Swivel", detail: "" },
+      { name: "Tibia Stretch on Wall", detail: "" },
+      { name: "Roller", detail: "" }
+    ]}
+  ],
+  pull: [
+    { section: "Warm-Up", items: [
+      { name: "Leg Side to Side", detail: "" },
+      { name: "Crunch with Stomach Up", detail: "" },
+      { name: "Windshield", detail: "" },
+      { name: "Best Stretch in the World", detail: "" },
+      { name: "Superman", detail: "" },
+      { name: "Banded Pull Apart", detail: "" }
+    ]},
+    { section: "Pull Exercises", items: [
+      { name: "Kettlebell Goblet Squats", detail: "From blocks — 20 lbs" },
+      { name: "Dumbbell Row", detail: "Leg on bench, row with one arm — 35 lbs" },
+      { name: "Glute Bridge", detail: "Back barely on bench, weight between legs — 45 lbs" },
+      { name: "Single Arm Cable Row", detail: "17.5 lbs, Pin 13" },
+      { name: "TRX Assisted Pull-Ups", detail: "" },
+      { name: "Dumbbell Biceps Curl", detail: "" }
+    ]},
+    { section: "Post", items: [
+      { name: "Shoulder Stretch on Wall", detail: "" },
+      { name: "90/90 Swivel", detail: "" },
+      { name: "Tibia Stretch on Wall", detail: "" },
+      { name: "Roller", detail: "" }
+    ]}
+  ]
+};
+
+// ─── STATE ───
+var workoutData = null;
+var checkedState = { push: {}, pull: {} };
+var currentTab = 'push';
+var currentMode = 'workout';
+
+// ─── SYNC ───
+function setSyncStatus(status) {
+  var dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot ' + status;
+  dot.title = status === 'synced' ? 'Saved to cloud' : status === 'syncing' ? 'Saving...' : 'Save failed';
+}
+
+var saveTimer = null;
+function debouncedSave() {
+  setSyncStatus('syncing');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(function() {
+    Promise.all([
+      fbSet('workouts', workoutData),
+      fbSet('checks', checkedState)
+    ]).then(function() {
+      setSyncStatus('synced');
+    }).catch(function() {
+      setSyncStatus('error');
+    });
+  }, 600);
+}
+
+// ─── INIT ───
+function init() {
+  Promise.all([
+    fbGet('workouts'),
+    fbGet('checks')
+  ]).then(function(results) {
+    workoutData = results[0] || JSON.parse(JSON.stringify(defaultData));
+    checkedState = results[1] || { push: {}, pull: {} };
+
+    // Ensure checked state has both keys
+    if (!checkedState.push) checkedState.push = {};
+    if (!checkedState.pull) checkedState.pull = {};
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').classList.add('ready');
+    setSyncStatus('synced');
+
+    switchTab('push');
+    renderChecklist();
+  }).catch(function(err) {
+    console.error('Failed to load from Firebase:', err);
+    // Fall back to defaults
+    workoutData = JSON.parse(JSON.stringify(defaultData));
+    checkedState = { push: {}, pull: {} };
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').classList.add('ready');
+    setSyncStatus('error');
+
+    switchTab('push');
+    renderChecklist();
+  });
+}
+
+// ─── MODE ───
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-workout').classList.toggle('active', mode === 'workout');
+  document.getElementById('mode-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('view-workout').classList.toggle('active', mode === 'workout');
+  document.getElementById('view-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('bar-workout').classList.toggle('active', mode === 'workout');
+
+  if (mode === 'workout') {
+    debouncedSave();
+    renderChecklist();
+    showToast('Changes saved!');
+  } else {
+    renderEditor();
+  }
+}
+
+// ─── TAB ───
+function switchTab(which) {
+  currentTab = which;
+  document.getElementById('tab-push').className = 'tab' + (which === 'push' ? ' active-push' : '');
+  document.getElementById('tab-pull').className = 'tab' + (which === 'pull' ? ' active-pull' : '');
+  document.getElementById('workout-push').classList.toggle('active', which === 'push');
+  document.getElementById('workout-pull').classList.toggle('active', which === 'pull');
+  document.getElementById('panel-push').classList.toggle('active', which === 'push');
+  document.getElementById('panel-pull').classList.toggle('active', which === 'pull');
+}
+
+// ─── CHECKLIST ───
+function renderChecklist() {
+  ['push', 'pull'].forEach(function(wk) {
+    var container = document.getElementById('workout-' + wk);
+    var progressBar = container.querySelector('.progress-bar');
+    container.innerHTML = '';
+    container.appendChild(progressBar);
+
+    workoutData[wk].forEach(function(sec, si) {
+      var sDiv = document.createElement('div');
+      sDiv.className = 'section';
+      sDiv.innerHTML = '<div class="section-title">' + esc(sec.section) + '</div>';
+
+      sec.items.forEach(function(item, ii) {
+        if (!item.name.trim()) return;
+        var key = si + '-' + ii;
+        var el = document.createElement('div');
+        el.className = 'item';
+        if (checkedState[wk] && checkedState[wk][key]) el.classList.add('checked');
+        el.onclick = function() {
+          el.classList.toggle('checked');
+          if (!checkedState[wk]) checkedState[wk] = {};
+          checkedState[wk][key] = el.classList.contains('checked');
+          debouncedSave();
+          updateProgress();
+        };
+        var detailHtml = item.detail && item.detail.trim() ? '<div class="item-detail">' + esc(item.detail) + '</div>' : '';
+        el.innerHTML =
+          '<div class="checkbox"><svg><polyline points="4 8 8 12 16 4"/></svg></div>' +
+          '<div class="item-content"><span class="item-name">' + esc(item.name) + '</span>' + detailHtml + '</div>';
+        sDiv.appendChild(el);
+      });
+
+      container.appendChild(sDiv);
+    });
+  });
+  updateProgress();
+}
+
+function updateProgress() {
+  ['push', 'pull'].forEach(function(id) {
+    var p = document.getElementById('workout-' + id);
+    var items = p.querySelectorAll('.item');
+    var c = p.querySelectorAll('.item.checked');
+    var pct = items.length ? (c.length / items.length) * 100 : 0;
+    document.getElementById('progress-' + id).style.width = pct + '%';
+  });
+}
+
+function resetAll() {
+  var wk = currentTab;
+  var container = document.getElementById('workout-' + wk);
+  container.querySelectorAll('.item.checked').forEach(function(e) { e.classList.remove('checked'); });
+  checkedState[wk] = {};
+  debouncedSave();
+  updateProgress();
+}
+
+// ─── EDITOR ───
+function renderEditor() {
+  ['push', 'pull'].forEach(function(wk) {
+    var panel = document.getElementById('panel-' + wk);
+    panel.innerHTML = '';
+    workoutData[wk].forEach(function(sec, si) {
+      var sDiv = document.createElement('div');
+      sDiv.className = 'section';
+
+      var header = document.createElement('div');
+      header.className = 'section-header';
+      header.innerHTML = '<div class="section-title">' + esc(sec.section) + '</div>' +
+        '<button class="add-btn" onclick="addItem(\'' + wk + '\',' + si + ')">+ Add</button>';
+      sDiv.appendChild(header);
+
+      var labels = document.createElement('div');
+      labels.className = 'row-labels';
+      labels.innerHTML = '<span class="row-label">Exercise</span><span class="row-label">Notes / Weight</span><span class="row-label"></span>';
+      sDiv.appendChild(labels);
+
+      sec.items.forEach(function(item, ii) {
+        var row = document.createElement('div');
+        row.className = 'row';
+        var top = document.createElement('div');
+        top.className = 'row-top';
+
+        var inp1 = document.createElement('input');
+        inp1.type = 'text'; inp1.value = item.name; inp1.placeholder = 'Exercise name';
+        inp1.oninput = function() {
+          workoutData[wk][si].items[ii].name = this.value;
+          debouncedSave();
+        };
+
+        var inp2 = document.createElement('input');
+        inp2.type = 'text'; inp2.value = item.detail; inp2.placeholder = 'Notes / weight';
+        inp2.oninput = function() {
+          workoutData[wk][si].items[ii].detail = this.value;
+          debouncedSave();
+        };
+
+        var del = document.createElement('button');
+        del.className = 'delete-btn'; del.innerHTML = '&times;';
+        del.onclick = function() {
+          workoutData[wk][si].items.splice(ii, 1);
+          debouncedSave();
+          renderEditor();
+        };
+
+        top.appendChild(inp1);
+        top.appendChild(inp2);
+        top.appendChild(del);
+        row.appendChild(top);
+        sDiv.appendChild(row);
+      });
+
+      panel.appendChild(sDiv);
+    });
+  });
+}
+
+function addItem(wk, si) {
+  workoutData[wk][si].items.push({ name: "", detail: "" });
+  debouncedSave();
+  renderEditor();
+  var panel = document.getElementById('panel-' + wk);
+  var sections = panel.querySelectorAll('.section');
+  var rows = sections[si].querySelectorAll('.row');
+  var last = rows[rows.length - 1];
+  if (last) last.querySelector('input').focus();
+}
+
+// ─── UTILS ───
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 1800);
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── GO ───
+init();
+</script>
+</body>
+</html>
