@@ -124,7 +124,7 @@
 
 <div class="bottom-bar" id="bottom-bar"></div>
 <div class="toast" id="toast"></div>
-<div id="debug-log" style="position:fixed;bottom:70px;left:0.5rem;right:0.5rem;background:#1a1d23;border:1px solid #e5484d;border-radius:8px;padding:0.5rem;font-size:0.6rem;color:#e8e8ec;max-height:150px;overflow:auto;z-index:100;font-family:monospace;white-space:pre-wrap"></div>
+
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -145,9 +145,6 @@ var workoutsRef = db.ref("workouts");
 var checksRef = db.ref("checks");
 var historyRef = db.ref("history");
 
-function dbg(msg) {
-  var el = document.getElementById("debug-log");
-  if (el) { el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; }
 }
 
 // --- DEFAULT DATA ---
@@ -211,85 +208,67 @@ var editingItem = null;
 
 // --- SYNC ---
 function setSyncStatus(status) {
+  var dot = document.getElementById("sync-dot");
   var bar = document.getElementById("sync-bar");
-  if (!bar) return;
-
-  var color = "#6e7179";
-  var label = "Connecting...";
-
   if (status === "connected") {
-    color = "#3dd68c";
-    label = "Synced";
+    dot.style.background = "#3dd68c";
+    bar.innerHTML = '<span class="sync-dot" style="background:#3dd68c"></span>Synced';
   } else if (status === "saving") {
-    color = "#f0654a";
-    label = "Saving...";
+    dot.style.background = "#f0654a";
+    bar.innerHTML = '<span class="sync-dot" style="background:#f0654a"></span>Saving...';
   } else if (status === "error") {
-    color = "#e5484d";
-    label = "Offline - using local data";
+    dot.style.background = "#e5484d";
+    bar.innerHTML = '<span class="sync-dot" style="background:#e5484d"></span>Offline - using local data';
+  } else {
+    dot.style.background = "#6e7179";
+    bar.innerHTML = '<span class="sync-dot" style="background:#6e7179"></span>Connecting...';
   }
-
-  bar.innerHTML = '<span class="sync-dot" id="sync-dot" style="background:' + color + '"></span>' + label;
-}
-
-function normalizeHistory(value) {
-  if (!value || value === "none") return [];
-  return Array.isArray(value) ? value : Object.values(value);
 }
 
 function saveToFirebase(andThen) {
   setSyncStatus("saving");
   dbg("SAVE called. history length: " + (historyData ? historyData.length : "null"));
 
-  Promise.all([
-    workoutsRef.set(workoutData),
-    checksRef.set(checkedState),
-    historyRef.set(historyData || [])
-  ]).then(function() {
-    dbg("SAVE SUCCESS");
-    return historyRef.once("value");
-  }).then(function(snapshot) {
-    dbg("VERIFY history exists: " + (snapshot.exists() ? "yes" : "no"));
+  var updates = {};
+  updates["workouts"] = workoutData;
+  updates["checks"] = checkedState;
+  updates["history"] = historyData && historyData.length > 0 ? historyData : "none";
+
+  db.ref().update(updates).then(function() {
     setSyncStatus("connected");
     if (andThen) andThen();
   }).catch(function(err) {
-    dbg("SAVE FAILED: " + err.message);
     setSyncStatus("error");
     alert("Save failed: " + err.message);
     if (andThen) andThen();
   });
 }
 
-function loadFromFirebase() {
-  dbg("Loading from Firebase...");
-  setSyncStatus("saving");
+// Load once on page load
+db.ref().once("value").then(function(snapshot) {
+  var data = snapshot.val();
+  dbg("LOAD result: " + (data ? "has data" : "null/empty"));
+  if (data) {
+    dbg("LOAD keys: " + Object.keys(data).join(", "));
+    if (data.workouts) {
+      workoutData = data.workouts;
+    }
+    if (data.checks) {
+      checkedState = data.checks;
+    }
+    if (data.history && data.history !== "none") {
+      historyData = Array.isArray(data.history) ? data.history : Object.values(data.history);
+    } else {
+    }
+  } else {
+  }
+  try { setSyncStatus("connected"); } catch(e) {}
+  switchView("push");
+}).catch(function(err) {
+  try { setSyncStatus("error"); } catch(e) {}
+  switchView("push");
+});
 
-  Promise.all([
-    workoutsRef.once("value"),
-    checksRef.once("value"),
-    historyRef.once("value")
-  ]).then(function(results) {
-    var workoutsSnap = results[0];
-    var checksSnap = results[1];
-    var historySnap = results[2];
-
-    workoutData = workoutsSnap.val() || JSON.parse(JSON.stringify(defaultData));
-    checkedState = checksSnap.val() || { push: [], pull: [] };
-    historyData = normalizeHistory(historySnap.val());
-
-    dbg("Loaded workouts OK: " + (workoutsSnap.exists() ? "yes" : "default"));
-    dbg("Loaded checks OK: " + (checksSnap.exists() ? "yes" : "default"));
-    dbg("Loaded history OK, length: " + historyData.length);
-
-    setSyncStatus("connected");
-    switchView("push");
-  }).catch(function(err) {
-    dbg("LOAD ERROR: " + err.message);
-    setSyncStatus("error");
-    switchView("push");
-  });
-}
-
-loadFromFirebase();
 // Detect connection state
 // --- VIEW SWITCHING ---
 function switchView(v) {
@@ -515,7 +494,20 @@ function endWorkout() {
   renderWorkout(wk);
   showToast(wk.charAt(0).toUpperCase() + wk.slice(1) + " workout saved!");
 
-  saveToFirebase(function() {
+  // Save and show result via alert
+  setSyncStatus("saving");
+  var updates = {};
+  updates["workouts"] = workoutData;
+  updates["checks"] = checkedState;
+  updates["history"] = historyData;
+
+  db.ref().update(updates).then(function() {
+    setSyncStatus("connected");
+    alert("SAVE OK! History entries: " + historyData.length + "\nSwitching to history tab...");
+    switchView("history");
+  }).catch(function(err) {
+    setSyncStatus("error");
+    alert("SAVE FAILED: " + err.message);
     switchView("history");
   });
 }
