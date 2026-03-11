@@ -211,21 +211,24 @@ var editingItem = null;
 
 // --- SYNC ---
 function setSyncStatus(status) {
-  var dot = document.getElementById("sync-dot");
   var bar = document.getElementById("sync-bar");
+  if (!bar) return;
+
+  var color = "#6e7179";
+  var label = "Connecting...";
+
   if (status === "connected") {
-    dot.style.background = "#3dd68c";
-    bar.innerHTML = '<span class="sync-dot" style="background:#3dd68c"></span>Synced';
+    color = "#3dd68c";
+    label = "Synced";
   } else if (status === "saving") {
-    dot.style.background = "#f0654a";
-    bar.innerHTML = '<span class="sync-dot" style="background:#f0654a"></span>Saving...';
+    color = "#f0654a";
+    label = "Saving...";
   } else if (status === "error") {
-    dot.style.background = "#e5484d";
-    bar.innerHTML = '<span class="sync-dot" style="background:#e5484d"></span>Offline - using local data';
-  } else {
-    dot.style.background = "#6e7179";
-    bar.innerHTML = '<span class="sync-dot" style="background:#6e7179"></span>Connecting...';
+    color = "#e5484d";
+    label = "Offline - using local data";
   }
+
+  bar.innerHTML = '<span class="sync-dot" id="sync-dot" style="background:' + color + '"></span>' + label;
 }
 
 function normalizeHistory(value) {
