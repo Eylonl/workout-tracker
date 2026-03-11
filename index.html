@@ -291,9 +291,13 @@ dbRef.on("value", function(snapshot) {
 db.ref(".info/connected").on("value", function(snap) {
   debugLog("Connection state: " + snap.val());
   if (snap.val() === true) {
+    isConnected = true;
     setSyncStatus("connected");
   } else {
-    setSyncStatus("error");
+    if (isConnected) {
+      // Was connected, lost connection
+      setSyncStatus("error");
+    }
   }
 });
 
