@@ -124,6 +124,7 @@
 
 <div class="bottom-bar" id="bottom-bar"></div>
 <div class="toast" id="toast"></div>
+<div id="debug-log" style="position:fixed;bottom:70px;left:0.5rem;right:0.5rem;background:#1a1d23;border:1px solid #e5484d;border-radius:8px;padding:0.5rem;font-size:0.6rem;color:#e8e8ec;max-height:150px;overflow:auto;z-index:100;font-family:monospace;white-space:pre-wrap"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -141,6 +142,11 @@ firebase.initializeApp({
 
 var db = firebase.database();
 var dbRef = db.ref("pushpull");
+
+function dbg(msg) {
+  var el = document.getElementById("debug-log");
+  if (el) { el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; }
+}
 
 // --- DEFAULT DATA ---
 var defaultData = {
@@ -222,15 +228,22 @@ function setSyncStatus(status) {
 
 function saveToFirebase(andThen) {
   setSyncStatus("saving");
+  dbg("SAVE called. history length: " + (historyData ? historyData.length : "null"));
+  if (historyData && historyData.length > 0) {
+    dbg("First history entry type: " + historyData[0].type + " date: " + historyData[0].date);
+  }
   var payload = {
     workouts: workoutData,
     checks: checkedState,
-    history: historyData && historyData.length > 0 ? historyData : []
+    history: historyData && historyData.length > 0 ? historyData : false
   };
+  dbg("Payload history type: " + typeof payload.history);
   dbRef.set(payload).then(function() {
+    dbg("SAVE SUCCESS");
     setSyncStatus("connected");
     if (andThen) andThen();
   }).catch(function(err) {
+    dbg("SAVE FAILED: " + err.message);
     setSyncStatus("error");
     alert("Save failed: " + err.message);
     if (andThen) andThen();
@@ -238,20 +251,26 @@ function saveToFirebase(andThen) {
 }
 
 // Load once on page load
+dbg("Loading from Firebase...");
 dbRef.once("value").then(function(snapshot) {
   var data = snapshot.val();
+  dbg("LOAD result: " + (data ? "has data" : "null/empty"));
   if (data) {
+    dbg("LOAD keys: " + Object.keys(data).join(", "));
+    dbg("LOAD history: " + (data.history ? JSON.stringify(data.history).substring(0, 100) : "none"));
     workoutData = data.workouts || JSON.parse(JSON.stringify(defaultData));
     checkedState = data.checks || { push: [], pull: [] };
-    historyData = data.history || [];
+    historyData = data.history ? (Array.isArray(data.history) ? data.history : Object.values(data.history)) : [];
+    dbg("historyData length after load: " + historyData.length);
     setSyncStatus("connected");
     switchView("push");
   } else {
+    dbg("No data, pushing defaults");
     setSyncStatus("connected");
     saveToFirebase();
   }
 }).catch(function(err) {
-  console.error("Firebase load error:", err);
+  dbg("LOAD ERROR: " + err.message);
   setSyncStatus("error");
 });
 
