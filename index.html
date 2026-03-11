@@ -124,7 +124,6 @@
 
 <div class="bottom-bar" id="bottom-bar"></div>
 <div class="toast" id="toast"></div>
-<div id="debug-log" style="display:none;position:fixed;bottom:80px;left:1rem;right:1rem;background:#1a1d23;border:1px solid #e5484d;border-radius:8px;padding:0.5rem;font-size:0.65rem;color:#e8e8ec;max-height:120px;overflow:auto;z-index:100;font-family:monospace;white-space:pre-wrap"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -142,17 +141,6 @@ firebase.initializeApp({
 
 var db = firebase.database();
 var dbRef = db.ref("pushpull");
-var debugEl = null;
-
-function debugLog(msg) {
-  if (!debugEl) {
-    debugEl = document.getElementById("debug-log");
-  }
-  if (debugEl) {
-    debugEl.textContent += msg + "\n";
-    debugEl.style.display = "block";
-  }
-}
 
 // --- DEFAULT DATA ---
 var defaultData = {
@@ -212,8 +200,6 @@ var checkedState = { push: [], pull: [] };
 var historyData = [];
 var currentView = "push";
 var editingItem = null;
-var isConnected = false;
-var ignoreNextUpdate = false;
 
 // --- SYNC ---
 function setSyncStatus(status) {
@@ -235,7 +221,6 @@ function setSyncStatus(status) {
 }
 
 function saveToFirebase(andThen) {
-  ignoreNextUpdate = true;
   setSyncStatus("saving");
   dbRef.set({
     workouts: workoutData,
@@ -243,64 +228,33 @@ function saveToFirebase(andThen) {
     history: historyData || []
   }).then(function() {
     setSyncStatus("connected");
-    setTimeout(function() { ignoreNextUpdate = false; }, 1000);
     if (andThen) andThen();
   }).catch(function(err) {
     console.error("Save failed:", err);
     setSyncStatus("error");
-    ignoreNextUpdate = false;
     if (andThen) andThen();
   });
 }
 
-var saveTimer = null;
-function debouncedSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveToFirebase, 400);
-}
-
-// Listen for real-time changes
-dbRef.on("value", function(snapshot) {
-  debugLog("Firebase data received");
-  if (ignoreNextUpdate) { debugLog("Ignoring (own save)"); return; }
+// Load once on page load
+dbRef.once("value").then(function(snapshot) {
   var data = snapshot.val();
   if (data) {
-    debugLog("Data loaded OK");
     workoutData = data.workouts || JSON.parse(JSON.stringify(defaultData));
     checkedState = data.checks || { push: [], pull: [] };
     historyData = data.history || [];
-    isConnected = true;
     setSyncStatus("connected");
-    if (currentView === "push" || currentView === "pull") {
-      renderWorkout(currentView);
-    } else {
-      renderHistory();
-    }
+    switchView("push");
   } else {
-    debugLog("No data - pushing defaults");
-    isConnected = true;
     setSyncStatus("connected");
     saveToFirebase();
   }
-}, function(err) {
-  debugLog("Firebase ERROR: " + err.message);
+}).catch(function(err) {
+  console.error("Firebase load error:", err);
   setSyncStatus("error");
 });
 
 // Detect connection state
-db.ref(".info/connected").on("value", function(snap) {
-  debugLog("Connection state: " + snap.val());
-  if (snap.val() === true) {
-    isConnected = true;
-    setSyncStatus("connected");
-  } else {
-    if (isConnected) {
-      // Was connected, lost connection
-      setSyncStatus("error");
-    }
-  }
-});
-
 // --- VIEW SWITCHING ---
 function switchView(v) {
   currentView = v;
@@ -380,7 +334,6 @@ function renderWorkout(wk) {
           element.classList.toggle("checked");
           if (!checkedState[w]) checkedState[w] = [];
           checkedState[w][thisI] = element.classList.contains("checked");
-          debouncedSave();
           updateProgress(w);
         };
         checkEl.onclick = toggleFn;
@@ -440,7 +393,6 @@ function buildEditRow(wk, si, ii, item) {
     workoutData[wk][si].items[ii].name = inp1.value;
     workoutData[wk][si].items[ii].detail = inp2.value;
     editingItem = null;
-    saveToFirebase();
     renderWorkout(wk);
     showToast("Saved!");
   };
@@ -460,7 +412,6 @@ function buildEditRow(wk, si, ii, item) {
   deleteBtn.onclick = function() {
     workoutData[wk][si].items.splice(ii, 1);
     editingItem = null;
-    saveToFirebase();
     renderWorkout(wk);
   };
 
@@ -490,7 +441,6 @@ function renderBottomBar(wk) {
 
 function resetChecks() {
   checkedState[currentView] = [];
-  debouncedSave();
   renderWorkout(currentView);
 }
 
@@ -613,11 +563,6 @@ function esc(s) {
 }
 
 // --- INIT ---
-if (typeof firebase === "undefined") {
-  debugLog("ERROR: Firebase SDK not loaded!");
-} else {
-  debugLog("Firebase SDK loaded OK");
-}
 switchView("push");
 </script>
 </body>
