@@ -228,19 +228,24 @@ function setSyncStatus(status) {
   }
 }
 
+function normalizeHistory(value) {
+  if (!value || value === "none") return [];
+  return Array.isArray(value) ? value : Object.values(value);
+}
+
 function saveToFirebase(andThen) {
   setSyncStatus("saving");
   dbg("SAVE called. history length: " + (historyData ? historyData.length : "null"));
 
-  var updates = {};
-  updates["workouts"] = workoutData;
-  updates["checks"] = checkedState;
-  updates["history"] = historyData && historyData.length > 0 ? historyData : "none";
-
-  dbg("Writing to root paths...");
-
-  db.ref().update(updates).then(function() {
+  Promise.all([
+    workoutsRef.set(workoutData),
+    checksRef.set(checkedState),
+    historyRef.set(historyData || [])
+  ]).then(function() {
     dbg("SAVE SUCCESS");
+    return historyRef.once("value");
+  }).then(function(snapshot) {
+    dbg("VERIFY history exists: " + (snapshot.exists() ? "yes" : "no"));
     setSyncStatus("connected");
     if (andThen) andThen();
   }).catch(function(err) {
@@ -251,38 +256,37 @@ function saveToFirebase(andThen) {
   });
 }
 
-// Load once on page load
-dbg("Loading from Firebase...");
-db.ref().once("value").then(function(snapshot) {
-  var data = snapshot.val();
-  dbg("LOAD result: " + (data ? "has data" : "null/empty"));
-  if (data) {
-    dbg("LOAD keys: " + Object.keys(data).join(", "));
-    if (data.workouts) {
-      workoutData = data.workouts;
-      dbg("Loaded workouts OK");
-    }
-    if (data.checks) {
-      checkedState = data.checks;
-      dbg("Loaded checks OK");
-    }
-    if (data.history && data.history !== "none") {
-      historyData = Array.isArray(data.history) ? data.history : Object.values(data.history);
-      dbg("Loaded history OK, length: " + historyData.length);
-    } else {
-      dbg("No history found");
-    }
-  } else {
-    dbg("No data in Firebase");
-  }
-  try { setSyncStatus("connected"); } catch(e) {}
-  switchView("push");
-}).catch(function(err) {
-  dbg("LOAD ERROR: " + err.message);
-  try { setSyncStatus("error"); } catch(e) {}
-  switchView("push");
-});
+function loadFromFirebase() {
+  dbg("Loading from Firebase...");
+  setSyncStatus("saving");
 
+  Promise.all([
+    workoutsRef.once("value"),
+    checksRef.once("value"),
+    historyRef.once("value")
+  ]).then(function(results) {
+    var workoutsSnap = results[0];
+    var checksSnap = results[1];
+    var historySnap = results[2];
+
+    workoutData = workoutsSnap.val() || JSON.parse(JSON.stringify(defaultData));
+    checkedState = checksSnap.val() || { push: [], pull: [] };
+    historyData = normalizeHistory(historySnap.val());
+
+    dbg("Loaded workouts OK: " + (workoutsSnap.exists() ? "yes" : "default"));
+    dbg("Loaded checks OK: " + (checksSnap.exists() ? "yes" : "default"));
+    dbg("Loaded history OK, length: " + historyData.length);
+
+    setSyncStatus("connected");
+    switchView("push");
+  }).catch(function(err) {
+    dbg("LOAD ERROR: " + err.message);
+    setSyncStatus("error");
+    switchView("push");
+  });
+}
+
+loadFromFirebase();
 // Detect connection state
 // --- VIEW SWITCHING ---
 function switchView(v) {
@@ -508,20 +512,7 @@ function endWorkout() {
   renderWorkout(wk);
   showToast(wk.charAt(0).toUpperCase() + wk.slice(1) + " workout saved!");
 
-  // Save and show result via alert
-  setSyncStatus("saving");
-  var updates = {};
-  updates["workouts"] = workoutData;
-  updates["checks"] = checkedState;
-  updates["history"] = historyData;
-
-  db.ref().update(updates).then(function() {
-    setSyncStatus("connected");
-    alert("SAVE OK! History entries: " + historyData.length + "\nSwitching to history tab...");
-    switchView("history");
-  }).catch(function(err) {
-    setSyncStatus("error");
-    alert("SAVE FAILED: " + err.message);
+  saveToFirebase(function() {
     switchView("history");
   });
 }
