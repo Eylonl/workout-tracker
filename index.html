@@ -124,6 +124,7 @@
 
 <div class="bottom-bar" id="bottom-bar"></div>
 <div class="toast" id="toast"></div>
+<div id="debug-log" style="display:none;position:fixed;bottom:80px;left:1rem;right:1rem;background:#1a1d23;border:1px solid #e5484d;border-radius:8px;padding:0.5rem;font-size:0.65rem;color:#e8e8ec;max-height:120px;overflow:auto;z-index:100;font-family:monospace;white-space:pre-wrap"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -141,6 +142,17 @@ firebase.initializeApp({
 
 var db = firebase.database();
 var dbRef = db.ref("pushpull");
+var debugEl = null;
+
+function debugLog(msg) {
+  if (!debugEl) {
+    debugEl = document.getElementById("debug-log");
+  }
+  if (debugEl) {
+    debugEl.textContent += msg + "\n";
+    debugEl.style.display = "block";
+  }
+}
 
 // --- DEFAULT DATA ---
 var defaultData = {
@@ -249,33 +261,35 @@ function debouncedSave() {
 
 // Listen for real-time changes
 dbRef.on("value", function(snapshot) {
-  if (ignoreNextUpdate) return;
+  debugLog("Firebase data received");
+  if (ignoreNextUpdate) { debugLog("Ignoring (own save)"); return; }
   var data = snapshot.val();
   if (data) {
+    debugLog("Data loaded OK");
     workoutData = data.workouts || JSON.parse(JSON.stringify(defaultData));
     checkedState = data.checks || { push: [], pull: [] };
     historyData = data.history || [];
     isConnected = true;
     setSyncStatus("connected");
-    // Re-render current view
     if (currentView === "push" || currentView === "pull") {
       renderWorkout(currentView);
     } else {
       renderHistory();
     }
   } else {
-    // No data in Firebase yet, push defaults
+    debugLog("No data - pushing defaults");
     isConnected = true;
     setSyncStatus("connected");
     saveToFirebase();
   }
 }, function(err) {
-  console.error("Firebase listen error:", err);
+  debugLog("Firebase ERROR: " + err.message);
   setSyncStatus("error");
 });
 
 // Detect connection state
 db.ref(".info/connected").on("value", function(snap) {
+  debugLog("Connection state: " + snap.val());
   if (snap.val() === true) {
     setSyncStatus("connected");
   } else {
@@ -595,6 +609,11 @@ function esc(s) {
 }
 
 // --- INIT ---
+if (typeof firebase === "undefined") {
+  debugLog("ERROR: Firebase SDK not loaded!");
+} else {
+  debugLog("Firebase SDK loaded OK");
+}
 switchView("push");
 </script>
 </body>
