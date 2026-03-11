@@ -141,7 +141,9 @@ firebase.initializeApp({
 });
 
 var db = firebase.database();
-var dbRef = db.ref("pushpull");
+var workoutsRef = db.ref("workouts");
+var checksRef = db.ref("checks");
+var historyRef = db.ref("history");
 
 function dbg(msg) {
   var el = document.getElementById("debug-log");
@@ -229,16 +231,15 @@ function setSyncStatus(status) {
 function saveToFirebase(andThen) {
   setSyncStatus("saving");
   dbg("SAVE called. history length: " + (historyData ? historyData.length : "null"));
-  if (historyData && historyData.length > 0) {
-    dbg("First history entry type: " + historyData[0].type + " date: " + historyData[0].date);
-  }
-  var payload = {
-    workouts: workoutData,
-    checks: checkedState,
-    history: historyData && historyData.length > 0 ? historyData : "none"
-  };
-  dbg("Payload history type: " + typeof payload.history);
-  dbRef.set(payload).then(function() {
+
+  var updates = {};
+  updates["workouts"] = workoutData;
+  updates["checks"] = checkedState;
+  updates["history"] = historyData && historyData.length > 0 ? historyData : "none";
+
+  dbg("Writing to root paths...");
+
+  db.ref().update(updates).then(function() {
     dbg("SAVE SUCCESS");
     setSyncStatus("connected");
     if (andThen) andThen();
@@ -252,18 +253,27 @@ function saveToFirebase(andThen) {
 
 // Load once on page load
 dbg("Loading from Firebase...");
-dbRef.once("value").then(function(snapshot) {
+db.ref().once("value").then(function(snapshot) {
   var data = snapshot.val();
   dbg("LOAD result: " + (data ? "has data" : "null/empty"));
   if (data) {
     dbg("LOAD keys: " + Object.keys(data).join(", "));
-    dbg("LOAD history: " + (data.history ? JSON.stringify(data.history).substring(0, 100) : "none"));
-    workoutData = data.workouts || JSON.parse(JSON.stringify(defaultData));
-    checkedState = data.checks || { push: [], pull: [] };
-    historyData = (data.history && data.history !== "none") ? (Array.isArray(data.history) ? data.history : Object.values(data.history)) : [];
-    dbg("historyData length after load: " + historyData.length);
+    if (data.workouts) {
+      workoutData = data.workouts;
+      dbg("Loaded workouts OK");
+    }
+    if (data.checks) {
+      checkedState = data.checks;
+      dbg("Loaded checks OK");
+    }
+    if (data.history && data.history !== "none") {
+      historyData = Array.isArray(data.history) ? data.history : Object.values(data.history);
+      dbg("Loaded history OK, length: " + historyData.length);
+    } else {
+      dbg("No history found");
+    }
   } else {
-    dbg("No data in Firebase, using local defaults (NOT overwriting)");
+    dbg("No data in Firebase");
   }
   try { setSyncStatus("connected"); } catch(e) {}
   switchView("push");
