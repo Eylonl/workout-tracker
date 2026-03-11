@@ -222,16 +222,17 @@ function setSyncStatus(status) {
 
 function saveToFirebase(andThen) {
   setSyncStatus("saving");
-  dbRef.set({
+  var payload = {
     workouts: workoutData,
     checks: checkedState,
-    history: historyData || []
-  }).then(function() {
+    history: historyData && historyData.length > 0 ? historyData : []
+  };
+  dbRef.set(payload).then(function() {
     setSyncStatus("connected");
     if (andThen) andThen();
   }).catch(function(err) {
-    console.error("Save failed:", err);
     setSyncStatus("error");
+    alert("Save failed: " + err.message);
     if (andThen) andThen();
   });
 }
