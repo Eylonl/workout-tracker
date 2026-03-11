@@ -507,7 +507,21 @@ function endWorkout() {
   checkedState[wk] = [];
   renderWorkout(wk);
   showToast(wk.charAt(0).toUpperCase() + wk.slice(1) + " workout saved!");
-  saveToFirebase(function() {
+
+  // Save and show result via alert
+  setSyncStatus("saving");
+  var updates = {};
+  updates["workouts"] = workoutData;
+  updates["checks"] = checkedState;
+  updates["history"] = historyData;
+
+  db.ref().update(updates).then(function() {
+    setSyncStatus("connected");
+    alert("SAVE OK! History entries: " + historyData.length + "\nSwitching to history tab...");
+    switchView("history");
+  }).catch(function(err) {
+    setSyncStatus("error");
+    alert("SAVE FAILED: " + err.message);
     switchView("history");
   });
 }
