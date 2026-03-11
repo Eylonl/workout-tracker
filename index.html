@@ -235,7 +235,7 @@ function saveToFirebase(andThen) {
   var payload = {
     workouts: workoutData,
     checks: checkedState,
-    history: historyData && historyData.length > 0 ? historyData : false
+    history: historyData && historyData.length > 0 ? historyData : "none"
   };
   dbg("Payload history type: " + typeof payload.history);
   dbRef.set(payload).then(function() {
@@ -260,18 +260,17 @@ dbRef.once("value").then(function(snapshot) {
     dbg("LOAD history: " + (data.history ? JSON.stringify(data.history).substring(0, 100) : "none"));
     workoutData = data.workouts || JSON.parse(JSON.stringify(defaultData));
     checkedState = data.checks || { push: [], pull: [] };
-    historyData = data.history ? (Array.isArray(data.history) ? data.history : Object.values(data.history)) : [];
+    historyData = (data.history && data.history !== "none") ? (Array.isArray(data.history) ? data.history : Object.values(data.history)) : [];
     dbg("historyData length after load: " + historyData.length);
-    setSyncStatus("connected");
-    switchView("push");
   } else {
-    dbg("No data, pushing defaults");
-    setSyncStatus("connected");
-    saveToFirebase();
+    dbg("No data in Firebase, using local defaults (NOT overwriting)");
   }
+  try { setSyncStatus("connected"); } catch(e) {}
+  switchView("push");
 }).catch(function(err) {
   dbg("LOAD ERROR: " + err.message);
-  setSyncStatus("error");
+  try { setSyncStatus("error"); } catch(e) {}
+  switchView("push");
 });
 
 // Detect connection state
