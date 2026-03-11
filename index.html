@@ -222,7 +222,7 @@ function setSyncStatus(status) {
   }
 }
 
-function saveToFirebase() {
+function saveToFirebase(andThen) {
   ignoreNextUpdate = true;
   setSyncStatus("saving");
   dbRef.set({
@@ -231,11 +231,13 @@ function saveToFirebase() {
     history: historyData || []
   }).then(function() {
     setSyncStatus("connected");
-    setTimeout(function() { ignoreNextUpdate = false; }, 500);
+    setTimeout(function() { ignoreNextUpdate = false; }, 1000);
+    if (andThen) andThen();
   }).catch(function(err) {
     console.error("Save failed:", err);
     setSyncStatus("error");
     ignoreNextUpdate = false;
+    if (andThen) andThen();
   });
 }
 
@@ -506,9 +508,11 @@ function endWorkout() {
   });
 
   checkedState[wk] = [];
-  saveToFirebase();
+  renderWorkout(wk);
   showToast(wk.charAt(0).toUpperCase() + wk.slice(1) + " workout saved!");
-  setTimeout(function() { switchView("history"); }, 600);
+  saveToFirebase(function() {
+    switchView("history");
+  });
 }
 
 // --- HISTORY ---
@@ -562,8 +566,8 @@ function renderHistory() {
     clearBtn.onclick = function() {
       if (confirm("Clear all workout history?")) {
         historyData = [];
-        saveToFirebase();
         renderHistory();
+        saveToFirebase();
       }
     };
     list.appendChild(clearBtn);
@@ -572,8 +576,8 @@ function renderHistory() {
 
 function deleteHistory(i) {
   historyData.splice(i, 1);
-  saveToFirebase();
   renderHistory();
+  saveToFirebase();
 }
 
 // --- UTILS ---
