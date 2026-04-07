@@ -102,6 +102,7 @@
   .history-ex-name { color: var(--text); }
   .history-ex-detail { color: var(--text-dim); font-size: 0.78rem; }
   .history-delete { font-size: 0.7rem; font-weight: 700; color: var(--danger); background: none; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; margin-left: 0.5rem; }
+  .history-cancel-btn { font-size: 0.7rem; font-weight: 700; color: var(--text-dim); background: none; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; margin-left: 0.5rem; }
 .history-workout-title { font-weight: 800; font-size: 1rem; letter-spacing: -0.01em; margin: 0.15rem 0 0.65rem; }
 .history-workout-title.push { color: var(--push-accent); }
 .history-workout-title.pull { color: var(--pull-accent); }
@@ -241,7 +242,6 @@ function setSyncStatus(status) {
 function normalizeHistory(value) {
   if (!value || value === "none") return [];
   var arr = Array.isArray(value) ? value : Object.values(value);
-  // Normalize each entry's sections and items (Firebase may convert arrays to objects)
   return arr.map(function(entry) {
     if (entry.sections) {
       var secs = Array.isArray(entry.sections) ? entry.sections : Object.values(entry.sections);
@@ -311,7 +311,7 @@ function loadFromFirebase() {
 }
 
 loadFromFirebase();
-// Detect connection state
+
 // --- VIEW SWITCHING ---
 function switchView(v) {
   currentView = v;
@@ -553,8 +553,9 @@ function endWorkout() {
 
 // --- HISTORY HELPERS ---
 var editingHistoryIdx = null;
+// Track which individual exercise is being edited within a history entry: { secIdx, itemIdx }
+var editingHistoryExercise = null;
 
-// Normalize Firebase objects/arrays (Firebase can convert arrays to objects)
 function toArray(val) {
   if (!val) return [];
   if (Array.isArray(val)) return val;
@@ -562,7 +563,6 @@ function toArray(val) {
   return [];
 }
 
-// Returns sections array for an entry, supporting both old (flat exercises) and new (sections) format
 function getEntrySections(entry) {
   if (entry.sections && (entry.sections.length || typeof entry.sections === "object")) {
     var secs = toArray(entry.sections);
@@ -573,7 +573,6 @@ function getEntrySections(entry) {
     });
   }
 
-  // Legacy fallback: infer original sections from current workout template
   var exercises = toArray(entry.exercises).map(function(ex) {
     return { name: ex.name || "", detail: ex.detail || "", completed: !!ex.completed };
   });
@@ -604,7 +603,7 @@ function getEntrySections(entry) {
 function buildCheckEl(completed) {
   var chk = document.createElement("div");
   chk.className = "item-check";
-  chk.style.cssText = "flex-shrink:0;margin-top:6px;cursor:pointer;";
+  chk.style.cssText = "flex-shrink:0;margin-top:1px;cursor:pointer;";
   chk.innerHTML = '<svg><polyline points="4 8 8 12 16 4"/></svg>';
   if (completed) {
     chk.style.background = "var(--check-green)";
@@ -649,29 +648,58 @@ function renderHistory() {
       var div = document.createElement("div");
       div.className = "history-entry";
 
-      // Header (shared by both modes)
+      // Header
       var hdr = document.createElement("div");
       hdr.className = "history-header";
-      var hdrLeft = '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
-      var hdrRight = '<span class="history-date">' + dateStr + ' - ' + timeStr;
-      if (editingHistoryIdx !== idx) {
-        hdrRight += ' <button class="history-edit-btn" onclick="editHistory(' + idx + ')">Edit</button>';
+
+      var hdrLeft = document.createElement("span");
+      hdrLeft.innerHTML = '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
+
+      var hdrRight = document.createElement("span");
+      hdrRight.className = "history-date";
+      hdrRight.textContent = dateStr + ' - ' + timeStr;
+
+      if (editingHistoryIdx === idx) {
+        // Cancel button in header
+        var cancelHdrBtn = document.createElement("button");
+        cancelHdrBtn.className = "history-cancel-btn";
+        cancelHdrBtn.textContent = "Cancel";
+        cancelHdrBtn.onclick = function() { editingHistoryIdx = null; editingHistoryExercise = null; renderHistory(); };
+        hdrRight.appendChild(cancelHdrBtn);
+      } else {
+        // Edit button in header
+        var editHdrBtn = document.createElement("button");
+        editHdrBtn.className = "history-edit-btn";
+        editHdrBtn.textContent = "Edit";
+        editHdrBtn.onclick = function() { editHistory(idx); };
+        hdrRight.appendChild(editHdrBtn);
       }
-      hdrRight += ' <button class="history-delete" onclick="confirmDeleteHistory(' + idx + ')">x</button></span>';
-      hdr.innerHTML = hdrLeft + hdrRight;
+
+      // Delete button always present
+      var deleteHdrBtn = document.createElement("button");
+      deleteHdrBtn.className = "history-delete";
+      deleteHdrBtn.textContent = "x";
+      deleteHdrBtn.onclick = function() { confirmDeleteHistory(idx); };
+      hdrRight.appendChild(deleteHdrBtn);
+
+      hdr.appendChild(hdrLeft);
+      hdr.appendChild(hdrRight);
       div.appendChild(hdr);
 
       var secs = getEntrySections(entry);
 
       if (editingHistoryIdx === idx) {
         // --- EDIT MODE ---
-        // Deep-copy sections for editing
-        var editSections = secs.map(function(sec) {
-          return {
-            section: sec.section,
-            items: sec.items.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; })
-          };
-        });
+        // Deep-copy sections for editing (stored on the entry temporarily)
+        if (!entry._editSections) {
+          entry._editSections = secs.map(function(sec) {
+            return {
+              section: sec.section,
+              items: sec.items.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; })
+            };
+          });
+        }
+        var editSections = entry._editSections;
 
         editSections.forEach(function(sec, secIdx) {
           var secWrap = document.createElement("div");
@@ -685,51 +713,109 @@ function renderHistory() {
           secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
           secWrap.appendChild(secTitle);
 
-          sec.items.forEach(function(item, j) {
-            (function(item, jj, secItems, secWrapEl) {
-              var row = document.createElement("div");
-              row.className = "item-editing";
-              row.style.padding = "0.6rem";
+          sec.items.forEach(function(item, jj) {
+            var isEditingThis = editingHistoryExercise && editingHistoryExercise.secIdx === secIdx && editingHistoryExercise.itemIdx === jj;
 
-              var top = document.createElement("div");
-              top.style.cssText = "display:flex;align-items:flex-start;gap:0.55rem;";
+            if (isEditingThis) {
+              // --- Expanded edit row for this exercise ---
+              (function(item, secI, itemI) {
+                var row = document.createElement("div");
+                row.className = "item-editing";
 
-              var chk = buildCheckEl(item.completed);
-              chk.style.marginTop = "0";
-              chk.onclick = function() {
-                item.completed = !item.completed;
-                setCheckEl(chk, item.completed);
-              };
+                var r1 = document.createElement("div");
+                r1.className = "edit-row";
+                var nameInp = document.createElement("input");
+                nameInp.type = "text"; nameInp.value = item.name; nameInp.placeholder = "Exercise name";
+                nameInp.oninput = function() { item.name = nameInp.value; };
+                r1.appendChild(nameInp);
+                row.appendChild(r1);
 
-              var inputs = document.createElement("div");
-              inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.35rem;min-width:0;";
+                var r2 = document.createElement("div");
+                r2.className = "edit-row";
+                var detailInp = document.createElement("input");
+                detailInp.type = "text"; detailInp.value = item.detail; detailInp.placeholder = "Notes / weight";
+                detailInp.oninput = function() { item.detail = detailInp.value; };
+                r2.appendChild(detailInp);
+                row.appendChild(r2);
 
-              var nameInp = document.createElement("input");
-              nameInp.type = "text";
-              nameInp.value = item.name;
-              nameInp.placeholder = "Exercise name";
-              nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.45rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
-              nameInp.oninput = function() { item.name = nameInp.value; };
+                var actions = document.createElement("div");
+                actions.className = "edit-actions";
 
-              var detailInp = document.createElement("input");
-              detailInp.type = "text";
-              detailInp.value = item.detail;
-              detailInp.placeholder = "Notes / weight";
-              detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
-              detailInp.oninput = function() { item.detail = detailInp.value; };
+                var doneBtn = document.createElement("button");
+                doneBtn.className = "edit-save"; doneBtn.textContent = "Done";
+                doneBtn.onclick = function() {
+                  editingHistoryExercise = null;
+                  renderHistory();
+                };
 
-              inputs.appendChild(nameInp);
-              inputs.appendChild(detailInp);
-              top.appendChild(chk);
-              top.appendChild(inputs);
-              row.appendChild(top);
-              secWrapEl.appendChild(row);
-            })(item, j, sec.items, secWrap);
+                var cancelBtn = document.createElement("button");
+                cancelBtn.className = "edit-cancel"; cancelBtn.textContent = "Cancel";
+                cancelBtn.onclick = function() {
+                  editingHistoryExercise = null;
+                  renderHistory();
+                };
+
+                actions.appendChild(doneBtn);
+                actions.appendChild(cancelBtn);
+                row.appendChild(actions);
+
+                secWrap.appendChild(row);
+                setTimeout(function() { nameInp.focus(); }, 50);
+              })(item, secIdx, jj);
+            } else {
+              // --- Read-only row with checkbox + pencil (like home tab) ---
+              (function(item, secI, itemI) {
+                var el = document.createElement("div");
+                el.className = "item" + (item.completed ? " checked" : "");
+                el.style.padding = "0.55rem 0.5rem";
+
+                var chk = buildCheckEl(item.completed);
+                chk.onclick = function() {
+                  item.completed = !item.completed;
+                  el.className = "item" + (item.completed ? " checked" : "");
+                  setCheckEl(chk, item.completed);
+                };
+
+                var content = document.createElement("div");
+                content.className = "item-content";
+                content.onclick = function() {
+                  item.completed = !item.completed;
+                  el.className = "item" + (item.completed ? " checked" : "");
+                  setCheckEl(chk, item.completed);
+                };
+
+                var nameSpan = document.createElement("span");
+                nameSpan.className = "item-name";
+                nameSpan.textContent = item.name;
+                content.appendChild(nameSpan);
+
+                if (item.detail && item.detail.trim()) {
+                  var detailDiv = document.createElement("div");
+                  detailDiv.className = "item-detail";
+                  detailDiv.textContent = item.detail;
+                  content.appendChild(detailDiv);
+                }
+
+                var editBtn = document.createElement("div");
+                editBtn.className = "edit-btn";
+                editBtn.innerHTML = '<svg viewBox="0 0 16 16"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/></svg>';
+                editBtn.onclick = function() {
+                  editingHistoryExercise = { secIdx: secI, itemIdx: itemI };
+                  renderHistory();
+                };
+
+                el.appendChild(chk);
+                el.appendChild(content);
+                el.appendChild(editBtn);
+                secWrap.appendChild(el);
+              })(item, secIdx, jj);
+            }
           });
 
           div.appendChild(secWrap);
         });
 
+        // Bottom save/cancel actions
         var actions = document.createElement("div");
         actions.className = "history-edit-actions";
         actions.style.marginTop = "0.75rem";
@@ -745,25 +831,32 @@ function renderHistory() {
             historyData[i2].exercises = allItems;
             historyData[i2].total = allItems.length;
             historyData[i2].completed = done;
+            delete historyData[i2]._editSections;
             editingHistoryIdx = null;
+            editingHistoryExercise = null;
             renderHistory();
             saveToFirebase();
             showToast("History updated!");
           };
         })(idx, editSections);
 
-        var cancelBtn = document.createElement("button");
-        cancelBtn.className = "hist-cancel-btn"; cancelBtn.textContent = "Cancel";
-        cancelBtn.onclick = function() { editingHistoryIdx = null; renderHistory(); };
+        var cancelBtn2 = document.createElement("button");
+        cancelBtn2.className = "hist-cancel-btn"; cancelBtn2.textContent = "Cancel";
+        cancelBtn2.onclick = function() {
+          delete historyData[idx]._editSections;
+          editingHistoryIdx = null;
+          editingHistoryExercise = null;
+          renderHistory();
+        };
 
-        var deleteBtn = document.createElement("button");
-        deleteBtn.className = "history-delete"; deleteBtn.textContent = "Delete";
-        deleteBtn.style.marginLeft = "auto";
-        deleteBtn.onclick = (function(i2) { return function() { confirmDeleteHistory(i2); }; })(idx);
+        var deleteBtn2 = document.createElement("button");
+        deleteBtn2.className = "history-delete"; deleteBtn2.textContent = "Delete";
+        deleteBtn2.style.marginLeft = "auto";
+        deleteBtn2.onclick = (function(i2) { return function() { confirmDeleteHistory(i2); }; })(idx);
 
         actions.appendChild(saveBtn);
-        actions.appendChild(cancelBtn);
-        actions.appendChild(deleteBtn);
+        actions.appendChild(cancelBtn2);
+        actions.appendChild(deleteBtn2);
         div.appendChild(actions);
 
       } else {
@@ -813,7 +906,7 @@ function renderHistory() {
     clearBtn.textContent = "Clear All History";
     clearBtn.onclick = function() {
       if (confirm("Clear all workout history?")) {
-        historyData = []; editingHistoryIdx = null;
+        historyData = []; editingHistoryIdx = null; editingHistoryExercise = null;
         renderHistory(); saveToFirebase();
       }
     };
@@ -822,7 +915,12 @@ function renderHistory() {
 }
 
 function editHistory(i) {
+  // Clean up previous edit sections
+  if (editingHistoryIdx !== null && historyData[editingHistoryIdx]) {
+    delete historyData[editingHistoryIdx]._editSections;
+  }
   editingHistoryIdx = i;
+  editingHistoryExercise = null;
   renderHistory();
 }
 
@@ -833,7 +931,8 @@ function confirmDeleteHistory(i) {
 }
 
 function deleteHistory(i) {
-  if (editingHistoryIdx === i) editingHistoryIdx = null;
+  if (editingHistoryIdx === i) { editingHistoryIdx = null; editingHistoryExercise = null; }
+  if (historyData[i]) delete historyData[i]._editSections;
   historyData.splice(i, 1);
   renderHistory();
   saveToFirebase();
