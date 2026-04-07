@@ -28,7 +28,7 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { background: var(--bg) !important; color: var(--text) !important; }
-  body { font-family: var(--font); min-height: 100vh; min-height: 100dvh; padding: 1rem; padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: 7rem; overscroll-behavior: none; }
+  body { font-family: var(--font); min-height: 100vh; min-height: 100dvh; padding: 1rem; padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); overscroll-behavior: none; }
   h1 { font-weight: 800; font-size: 1.6rem; text-align: center; margin: 0.75rem 0 0.25rem; letter-spacing: -0.02em; color: var(--text); }
   .sync-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
   .sync-bar { text-align: center; font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.75rem; }
@@ -71,13 +71,20 @@
   .progress-fill { height: 100%; border-radius: 2px; width: 0%; transition: width 0.35s ease; }
   .push-view .progress-fill { background: var(--push-accent); }
   .pull-view .progress-fill { background: var(--pull-accent); }
-  .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); display: flex; justify-content: center; gap: 0.75rem; }
+  .bottom-bar { display: flex; justify-content: center; gap: 0.75rem; margin-bottom: 1.25rem; }
   .bottom-bar.hidden { display: none; }
-  .action-btn { font-weight: 600; font-size: 0.85rem; padding: 0.7rem 1.5rem; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s; }
+  .action-btn { font-weight: 600; font-size: 0.85rem; padding: 0.7rem 1.5rem; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s; flex: 1; }
   .action-btn:active { transform: scale(0.96); }
   .btn-reset { background: var(--card); color: var(--text); border: 1px solid var(--card-border); }
   .btn-end-push { background: var(--push-accent); color: #fff; }
   .btn-end-pull { background: var(--pull-accent); color: #fff; }
+  .history-edit-btn { font-size: 0.7rem; font-weight: 700; color: var(--pull-accent); background: none; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; margin-left: 0.5rem; }
+  .history-editing .history-entry { border-color: var(--pull-accent); }
+  .history-ex-toggle { display: flex; align-items: baseline; gap: 0.4rem; padding: 0.25rem 0; cursor: pointer; border-radius: 6px; }
+  .history-ex-toggle:active { background: var(--section-bg); }
+  .history-edit-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+  .hist-save-btn { font-family: var(--font); font-weight: 700; font-size: 0.78rem; padding: 0.45rem 1rem; background: var(--check-green); color: var(--bg); border: none; border-radius: 8px; cursor: pointer; }
+  .hist-cancel-btn { font-family: var(--font); font-weight: 700; font-size: 0.78rem; padding: 0.45rem 1rem; background: var(--card); color: var(--text-dim); border: 1px solid var(--card-border); border-radius: 8px; cursor: pointer; }
   .add-exercise { display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem; margin-top: 0.5rem; border: 1px dashed var(--card-border); border-radius: 10px; color: var(--text-dim); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
   .add-exercise:active { background: var(--section-bg); }
   .history-empty { text-align: center; color: var(--text-dim); padding: 3rem 1rem; font-size: 0.9rem; line-height: 1.6; }
@@ -110,6 +117,8 @@
   <div class="nav-btn" id="nav-history" onclick="switchView('history')">History</div>
 </div>
 
+<div class="bottom-bar hidden" id="bottom-bar"></div>
+
 <div class="view push-view" id="view-push">
   <div class="progress-bar"><div class="progress-fill" id="progress-push"></div></div>
   <div id="list-push"></div>
@@ -122,7 +131,6 @@
   <div id="history-list"></div>
 </div>
 
-<div class="bottom-bar" id="bottom-bar"></div>
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -517,6 +525,8 @@ function endWorkout() {
 }
 
 // --- HISTORY ---
+var editingHistoryIdx = null;
+
 function renderHistory() {
   var list = document.getElementById("history-list");
   list.innerHTML = "";
@@ -527,37 +537,131 @@ function renderHistory() {
   }
 
   for (var i = 0; i < historyData.length; i++) {
-    var entry = historyData[i];
-    var d = new Date(entry.date);
-    var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    var dateStr = days[d.getDay()] + ", " + months[d.getMonth()] + " " + d.getDate();
-    var hrs = d.getHours();
-    var mins = d.getMinutes();
-    var ampm = hrs >= 12 ? "PM" : "AM";
-    hrs = hrs % 12;
-    if (hrs === 0) hrs = 12;
-    var timeStr = hrs + ":" + (mins < 10 ? "0" : "") + mins + " " + ampm;
+    (function(idx) {
+      var entry = historyData[idx];
+      var d = new Date(entry.date);
+      var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      var dateStr = days[d.getDay()] + ", " + months[d.getMonth()] + " " + d.getDate();
+      var hrs = d.getHours();
+      var mins = d.getMinutes();
+      var ampm = hrs >= 12 ? "PM" : "AM";
+      hrs = hrs % 12;
+      if (hrs === 0) hrs = 12;
+      var timeStr = hrs + ":" + (mins < 10 ? "0" : "") + mins + " " + ampm;
 
-    var div = document.createElement("div");
-    div.className = "history-entry";
-    var html = '<div class="history-header">';
-    html += '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
-    html += '<span class="history-date">' + dateStr + ' - ' + timeStr;
-    html += ' <button class="history-delete" onclick="deleteHistory(' + i + ')">x</button></span>';
-    html += '</div>';
-    html += '<div class="history-stats">' + entry.completed + ' / ' + entry.total + ' completed</div>';
-    html += '<div class="history-exercises">';
+      var div = document.createElement("div");
+      div.className = "history-entry";
 
-    for (var j = 0; j < entry.exercises.length; j++) {
-      var ex = entry.exercises[j];
-      var icon = ex.completed ? '<span class="history-ex-check">&#10003;</span>' : '<span class="history-ex-miss">&#9675;</span>';
-      var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
-      html += '<div class="history-ex">' + icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail + '</div>';
-    }
-    html += '</div>';
-    div.innerHTML = html;
-    list.appendChild(div);
+      if (editingHistoryIdx === idx) {
+        // --- EDIT MODE ---
+        var editState = entry.exercises.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; });
+
+        var hdr = document.createElement("div");
+        hdr.className = "history-header";
+        hdr.innerHTML = '<span class="history-type ' + entry.type + '">' + entry.type + '</span>' +
+          '<span class="history-date">' + dateStr + ' - ' + timeStr + '</span>';
+        div.appendChild(hdr);
+
+        var exList = document.createElement("div");
+        exList.className = "history-exercises";
+
+        editState.forEach(function(ex, j) {
+          var row = document.createElement("div");
+          row.className = "history-ex-toggle";
+          if (ex.completed) row.style.opacity = "1"; else row.style.opacity = "0.5";
+          var icon = ex.completed
+            ? '<span class="history-ex-check">&#10003;</span>'
+            : '<span class="history-ex-miss">&#9675;</span>';
+          var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
+          row.innerHTML = icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail;
+          row.onclick = (function(state, r, jj) {
+            return function() {
+              state[jj].completed = !state[jj].completed;
+              r.style.opacity = state[jj].completed ? "1" : "0.5";
+              r.innerHTML = (state[jj].completed
+                ? '<span class="history-ex-check">&#10003;</span>'
+                : '<span class="history-ex-miss">&#9675;</span>') +
+                ' <span class="history-ex-name">' + esc(state[jj].name) + '</span>' +
+                (state[jj].detail ? ' <span class="history-ex-detail">- ' + esc(state[jj].detail) + '</span>' : '');
+              r.onclick = arguments.callee.parentFn; // reassign after innerHTML swap
+            };
+          })(editState, row, j);
+          // fix onclick after innerHTML swap: use closure ref
+          (function(state, r, jj) {
+            r.onclick = function() {
+              state[jj].completed = !state[jj].completed;
+              r.style.opacity = state[jj].completed ? "1" : "0.5";
+              r.innerHTML = (state[jj].completed
+                ? '<span class="history-ex-check">&#10003;</span>'
+                : '<span class="history-ex-miss">&#9675;</span>') +
+                ' <span class="history-ex-name">' + esc(state[jj].name) + '</span>' +
+                (state[jj].detail ? ' <span class="history-ex-detail">- ' + esc(state[jj].detail) + '</span>' : '');
+            };
+          })(editState, row, j);
+          exList.appendChild(row);
+        });
+        div.appendChild(exList);
+
+        var actions = document.createElement("div");
+        actions.className = "history-edit-actions";
+
+        var saveBtn = document.createElement("button");
+        saveBtn.className = "hist-save-btn";
+        saveBtn.textContent = "Save";
+        saveBtn.onclick = (function(i2, state) {
+          return function() {
+            var done = state.filter(function(e) { return e.completed; }).length;
+            historyData[i2].exercises = state;
+            historyData[i2].completed = done;
+            editingHistoryIdx = null;
+            renderHistory();
+            saveToFirebase();
+            showToast("History updated!");
+          };
+        })(idx, editState);
+
+        var cancelBtn = document.createElement("button");
+        cancelBtn.className = "hist-cancel-btn";
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.onclick = function() { editingHistoryIdx = null; renderHistory(); };
+
+        var deleteBtn = document.createElement("button");
+        deleteBtn.className = "history-delete";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.style.marginLeft = "auto";
+        deleteBtn.onclick = (function(i2) {
+          return function() { deleteHistory(i2); };
+        })(idx);
+
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
+        actions.appendChild(deleteBtn);
+        div.appendChild(actions);
+
+      } else {
+        // --- VIEW MODE ---
+        var completedCount = entry.exercises.filter(function(e) { return e.completed; }).length;
+        var html = '<div class="history-header">';
+        html += '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
+        html += '<span class="history-date">' + dateStr + ' - ' + timeStr;
+        html += ' <button class="history-edit-btn" onclick="editHistory(' + idx + ')">Edit</button>';
+        html += ' <button class="history-delete" onclick="deleteHistory(' + idx + ')">x</button></span>';
+        html += '</div>';
+        html += '<div class="history-stats">' + completedCount + ' / ' + entry.total + ' completed</div>';
+        html += '<div class="history-exercises">';
+        for (var j = 0; j < entry.exercises.length; j++) {
+          var ex = entry.exercises[j];
+          var icon = ex.completed ? '<span class="history-ex-check">&#10003;</span>' : '<span class="history-ex-miss">&#9675;</span>';
+          var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
+          html += '<div class="history-ex">' + icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail + '</div>';
+        }
+        html += '</div>';
+        div.innerHTML = html;
+      }
+
+      list.appendChild(div);
+    })(i);
   }
 
   if (historyData.length > 1) {
@@ -567,6 +671,7 @@ function renderHistory() {
     clearBtn.onclick = function() {
       if (confirm("Clear all workout history?")) {
         historyData = [];
+        editingHistoryIdx = null;
         renderHistory();
         saveToFirebase();
       }
@@ -575,7 +680,13 @@ function renderHistory() {
   }
 }
 
+function editHistory(i) {
+  editingHistoryIdx = i;
+  renderHistory();
+}
+
 function deleteHistory(i) {
+  if (editingHistoryIdx === i) editingHistoryIdx = null;
   historyData.splice(i, 1);
   renderHistory();
   saveToFirebase();
