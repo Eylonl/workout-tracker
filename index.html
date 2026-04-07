@@ -649,46 +649,60 @@ function renderHistory() {
         });
 
         editSections.forEach(function(sec, secIdx) {
+          var secWrap = document.createElement("div");
+          secWrap.className = "section";
+          secWrap.style.marginTop = secIdx === 0 ? "0.5rem" : "0";
+
           var secTitle = document.createElement("div");
           secTitle.className = "section-title";
           secTitle.textContent = sec.section;
           secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
           secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
-          secTitle.style.marginTop = secIdx === 0 ? "0.5rem" : "1rem";
-          secTitle.style.marginBottom = "0.5rem";
-          div.appendChild(secTitle);
+          secWrap.appendChild(secTitle);
 
           sec.items.forEach(function(item, j) {
-            (function(item, jj) {
+            (function(item, jj, secItems, secWrapEl) {
               var row = document.createElement("div");
-              row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;";
+              row.className = "item-editing";
+              row.style.padding = "0.6rem";
+
+              var top = document.createElement("div");
+              top.style.cssText = "display:flex;align-items:flex-start;gap:0.55rem;";
 
               var chk = buildCheckEl(item.completed);
+              chk.style.marginTop = "0";
               chk.onclick = function() {
                 item.completed = !item.completed;
                 setCheckEl(chk, item.completed);
               };
 
               var inputs = document.createElement("div");
-              inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.3rem;";
+              inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.35rem;min-width:0;";
 
               var nameInp = document.createElement("input");
-              nameInp.type = "text"; nameInp.value = item.name; nameInp.placeholder = "Exercise name";
-              nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
+              nameInp.type = "text";
+              nameInp.value = item.name;
+              nameInp.placeholder = "Exercise name";
+              nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.45rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
               nameInp.oninput = function() { item.name = nameInp.value; };
 
               var detailInp = document.createElement("input");
-              detailInp.type = "text"; detailInp.value = item.detail; detailInp.placeholder = "Notes / weight";
-              detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.35rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
+              detailInp.type = "text";
+              detailInp.value = item.detail;
+              detailInp.placeholder = "Notes / weight";
+              detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
               detailInp.oninput = function() { item.detail = detailInp.value; };
 
               inputs.appendChild(nameInp);
               inputs.appendChild(detailInp);
-              row.appendChild(chk);
-              row.appendChild(inputs);
-              div.appendChild(row);
-            })(item, j);
+              top.appendChild(chk);
+              top.appendChild(inputs);
+              row.appendChild(top);
+              secWrapEl.appendChild(row);
+            })(item, j, sec.items, secWrap);
           });
+
+          div.appendChild(secWrap);
         });
 
         var actions = document.createElement("div");
@@ -704,6 +718,7 @@ function renderHistory() {
             eSecs.forEach(function(s) { s.items.forEach(function(ex) { allItems.push(ex); if (ex.completed) done++; }); });
             historyData[i2].sections = eSecs;
             historyData[i2].exercises = allItems;
+            historyData[i2].total = allItems.length;
             historyData[i2].completed = done;
             editingHistoryIdx = null;
             renderHistory();
