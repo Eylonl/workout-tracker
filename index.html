@@ -572,11 +572,33 @@ function getEntrySections(entry) {
       })};
     });
   }
-  // Legacy: wrap flat exercises in a single unnamed section
-  var exercises = toArray(entry.exercises);
-  return [{ section: entry.type === "push" ? "Push" : "Pull", items: exercises.map(function(ex) {
+
+  // Legacy fallback: infer original sections from current workout template
+  var exercises = toArray(entry.exercises).map(function(ex) {
     return { name: ex.name || "", detail: ex.detail || "", completed: !!ex.completed };
-  })}];
+  });
+
+  var template = workoutData[entry.type] || [];
+  if (!template.length) {
+    return [{ section: "", items: exercises }];
+  }
+
+  var out = [];
+  var start = 0;
+  template.forEach(function(sec) {
+    var count = toArray(sec.items).length;
+    var slice = exercises.slice(start, start + count);
+    if (slice.length) {
+      out.push({ section: sec.section || "", items: slice });
+    }
+    start += count;
+  });
+
+  if (!out.length) {
+    return [{ section: "", items: exercises }];
+  }
+
+  return out;
 }
 
 function buildCheckEl(completed) {
@@ -771,13 +793,17 @@ function renderHistory() {
         div.appendChild(statsEl);
 
         secs.forEach(function(sec) {
-          var secTitle = document.createElement("div");
-          secTitle.className = "section-title";
-          secTitle.textContent = sec.section;
-          secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
-          secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
-          secTitle.style.marginBottom = "0.35rem";
-          div.appendChild(secTitle);
+          var showHeader = sec.section && !/^(push|pull)$/i.test(sec.section.trim());
+
+          if (showHeader) {
+            var secTitle = document.createElement("div");
+            secTitle.className = "section-title";
+            secTitle.textContent = sec.section;
+            secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
+            secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
+            secTitle.style.marginBottom = "0.35rem";
+            div.appendChild(secTitle);
+          }
 
           var exDiv = document.createElement("div");
           exDiv.className = "history-exercises";
