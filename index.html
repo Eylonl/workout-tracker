@@ -237,7 +237,21 @@ function setSyncStatus(status) {
 
 function normalizeHistory(value) {
   if (!value || value === "none") return [];
-  return Array.isArray(value) ? value : Object.values(value);
+  var arr = Array.isArray(value) ? value : Object.values(value);
+  // Normalize each entry's sections and items (Firebase may convert arrays to objects)
+  return arr.map(function(entry) {
+    if (entry.sections) {
+      var secs = Array.isArray(entry.sections) ? entry.sections : Object.values(entry.sections);
+      entry.sections = secs.map(function(sec) {
+        sec.items = Array.isArray(sec.items) ? sec.items : (sec.items ? Object.values(sec.items) : []);
+        return sec;
+      });
+    }
+    if (entry.exercises) {
+      entry.exercises = Array.isArray(entry.exercises) ? entry.exercises : Object.values(entry.exercises);
+    }
+    return entry;
+  });
 }
 
 function saveToFirebase(andThen) {
@@ -533,11 +547,29 @@ function endWorkout() {
 // --- HISTORY HELPERS ---
 var editingHistoryIdx = null;
 
+// Normalize Firebase objects/arrays (Firebase can convert arrays to objects)
+function toArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === "object") return Object.values(val);
+  return [];
+}
+
 // Returns sections array for an entry, supporting both old (flat exercises) and new (sections) format
 function getEntrySections(entry) {
-  if (entry.sections && entry.sections.length) return entry.sections;
+  if (entry.sections && (entry.sections.length || typeof entry.sections === "object")) {
+    var secs = toArray(entry.sections);
+    return secs.map(function(sec) {
+      return { section: sec.section || "", items: toArray(sec.items).map(function(ex) {
+        return { name: ex.name || "", detail: ex.detail || "", completed: !!ex.completed };
+      })};
+    });
+  }
   // Legacy: wrap flat exercises in a single unnamed section
-  return [{ section: entry.type === "push" ? "Push" : "Pull", items: entry.exercises || [] }];
+  var exercises = toArray(entry.exercises);
+  return [{ section: entry.type === "push" ? "Push" : "Pull", items: exercises.map(function(ex) {
+    return { name: ex.name || "", detail: ex.detail || "", completed: !!ex.completed };
+  })}];
 }
 
 function buildCheckEl(completed) {
