@@ -678,15 +678,6 @@ function renderHistory() {
           };
         });
 
-        var workoutTitle = document.createElement("div");
-        workoutTitle.className = "section-title";
-        workoutTitle.textContent = entry.type === "push" ? "Push Workout" : "Pull Workout";
-        workoutTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
-        workoutTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
-        workoutTitle.style.marginTop = "0.5rem";
-        workoutTitle.style.marginBottom = "0.75rem";
-        div.appendChild(workoutTitle);
-
         editSections.forEach(function(sec, secIdx) {
           var secWrap = document.createElement("div");
           secWrap.className = "section";
