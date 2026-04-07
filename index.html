@@ -567,39 +567,56 @@ function renderHistory() {
         exList.className = "history-exercises";
 
         editState.forEach(function(ex, j) {
-          var row = document.createElement("div");
-          row.className = "history-ex-toggle";
-          if (ex.completed) row.style.opacity = "1"; else row.style.opacity = "0.5";
-          var icon = ex.completed
-            ? '<span class="history-ex-check">&#10003;</span>'
-            : '<span class="history-ex-miss">&#9675;</span>';
-          var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
-          row.innerHTML = icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail;
-          row.onclick = (function(state, r, jj) {
-            return function() {
+          (function(state, jj) {
+            var row = document.createElement("div");
+            row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;";
+
+            // Checkbox toggle
+            var chk = document.createElement("div");
+            chk.className = "item-check";
+            chk.style.cssText = "flex-shrink:0;margin-top:6px;cursor:pointer;";
+            chk.innerHTML = '<svg><polyline points="4 8 8 12 16 4"/></svg>';
+            if (state[jj].completed) {
+              chk.style.background = "var(--check-green)";
+              chk.style.borderColor = "var(--check-green)";
+              chk.querySelector("svg").style.opacity = "1";
+              chk.querySelector("svg").style.transform = "scale(1)";
+            }
+            chk.onclick = function() {
               state[jj].completed = !state[jj].completed;
-              r.style.opacity = state[jj].completed ? "1" : "0.5";
-              r.innerHTML = (state[jj].completed
-                ? '<span class="history-ex-check">&#10003;</span>'
-                : '<span class="history-ex-miss">&#9675;</span>') +
-                ' <span class="history-ex-name">' + esc(state[jj].name) + '</span>' +
-                (state[jj].detail ? ' <span class="history-ex-detail">- ' + esc(state[jj].detail) + '</span>' : '');
-              r.onclick = arguments.callee.parentFn; // reassign after innerHTML swap
+              if (state[jj].completed) {
+                chk.style.background = "var(--check-green)"; chk.style.borderColor = "var(--check-green)";
+                chk.querySelector("svg").style.opacity = "1"; chk.querySelector("svg").style.transform = "scale(1)";
+              } else {
+                chk.style.background = ""; chk.style.borderColor = "";
+                chk.querySelector("svg").style.opacity = "0"; chk.querySelector("svg").style.transform = "scale(0.5)";
+              }
             };
-          })(editState, row, j);
-          // fix onclick after innerHTML swap: use closure ref
-          (function(state, r, jj) {
-            r.onclick = function() {
-              state[jj].completed = !state[jj].completed;
-              r.style.opacity = state[jj].completed ? "1" : "0.5";
-              r.innerHTML = (state[jj].completed
-                ? '<span class="history-ex-check">&#10003;</span>'
-                : '<span class="history-ex-miss">&#9675;</span>') +
-                ' <span class="history-ex-name">' + esc(state[jj].name) + '</span>' +
-                (state[jj].detail ? ' <span class="history-ex-detail">- ' + esc(state[jj].detail) + '</span>' : '');
-            };
-          })(editState, row, j);
-          exList.appendChild(row);
+
+            // Inputs
+            var inputs = document.createElement("div");
+            inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.3rem;";
+
+            var nameInp = document.createElement("input");
+            nameInp.type = "text";
+            nameInp.value = state[jj].name;
+            nameInp.placeholder = "Exercise name";
+            nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
+            nameInp.oninput = function() { state[jj].name = nameInp.value; };
+
+            var detailInp = document.createElement("input");
+            detailInp.type = "text";
+            detailInp.value = state[jj].detail;
+            detailInp.placeholder = "Notes / weight";
+            detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.35rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
+            detailInp.oninput = function() { state[jj].detail = detailInp.value; };
+
+            inputs.appendChild(nameInp);
+            inputs.appendChild(detailInp);
+            row.appendChild(chk);
+            row.appendChild(inputs);
+            exList.appendChild(row);
+          })(editState, j);
         });
         div.appendChild(exList);
 
