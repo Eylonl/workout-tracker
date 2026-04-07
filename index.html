@@ -102,6 +102,9 @@
   .history-ex-name { color: var(--text); }
   .history-ex-detail { color: var(--text-dim); font-size: 0.78rem; }
   .history-delete { font-size: 0.7rem; font-weight: 700; color: var(--danger); background: none; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; margin-left: 0.5rem; }
+.history-workout-title { font-weight: 800; font-size: 1rem; letter-spacing: -0.01em; margin: 0.15rem 0 0.65rem; }
+.history-workout-title.push { color: var(--push-accent); }
+.history-workout-title.pull { color: var(--pull-accent); }
   .clear-history { display: block; margin: 1rem auto; font-weight: 700; font-size: 0.8rem; padding: 0.5rem 1.2rem; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card); color: var(--danger); cursor: pointer; }
   .toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--check-green); color: var(--bg); font-weight: 700; padding: 0.7rem 1.5rem; border-radius: 10px; font-size: 0.85rem; opacity: 0; transition: all 0.35s ease; pointer-events: none; z-index: 99; }
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
@@ -638,6 +641,11 @@ function renderHistory() {
 
       var secs = getEntrySections(entry);
 
+      var workoutTitle = document.createElement("div");
+      workoutTitle.className = "history-workout-title " + entry.type;
+      workoutTitle.textContent = (entry.type === "push" ? "Push" : "Pull") + " Workout";
+      div.appendChild(workoutTitle);
+
       if (editingHistoryIdx === idx) {
         // --- EDIT MODE ---
         // Deep-copy sections for editing
@@ -647,6 +655,15 @@ function renderHistory() {
             items: sec.items.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; })
           };
         });
+
+        var workoutTitle = document.createElement("div");
+        workoutTitle.className = "section-title";
+        workoutTitle.textContent = entry.type === "push" ? "Push Workout" : "Pull Workout";
+        workoutTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
+        workoutTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
+        workoutTitle.style.marginTop = "0.5rem";
+        workoutTitle.style.marginBottom = "0.75rem";
+        div.appendChild(workoutTitle);
 
         editSections.forEach(function(sec, secIdx) {
           var secWrap = document.createElement("div");
