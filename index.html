@@ -488,23 +488,30 @@ function resetChecks() {
 function endWorkout() {
   var wk = currentView;
   var now = new Date();
-  var exercises = [];
+  var sections = [];
   var totalItems = 0;
   var checkedCount = 0;
   var idx = 0;
 
   for (var si = 0; si < workoutData[wk].length; si++) {
     var sec = workoutData[wk][si];
+    var secItems = [];
     for (var ii = 0; ii < sec.items.length; ii++) {
       var item = sec.items[ii];
       if (!item.name.trim()) { idx++; continue; }
       var done = !!(checkedState[wk] && checkedState[wk][idx]);
-      exercises.push({ name: item.name, detail: item.detail, completed: done });
+      secItems.push({ name: item.name, detail: item.detail, completed: done });
       totalItems++;
       if (done) checkedCount++;
       idx++;
     }
+    if (secItems.length) sections.push({ section: sec.section, items: secItems });
   }
+
+  var flatExercises = [];
+  for (var s = 0; s < sections.length; s++)
+    for (var e = 0; e < sections[s].items.length; e++)
+      flatExercises.push(sections[s].items[e]);
 
   historyData.unshift({
     id: now.getTime(),
@@ -512,7 +519,8 @@ function endWorkout() {
     date: now.toISOString(),
     total: totalItems,
     completed: checkedCount,
-    exercises: exercises
+    sections: sections,
+    exercises: flatExercises
   });
 
   checkedState[wk] = [];
@@ -524,9 +532,41 @@ function endWorkout() {
   });
 }
 
-// --- HISTORY ---
+// --- HISTORY HELPERS ---
 var editingHistoryIdx = null;
 
+// Returns sections array for an entry, supporting both old (flat exercises) and new (sections) format
+function getEntrySections(entry) {
+  if (entry.sections && entry.sections.length) return entry.sections;
+  // Legacy: wrap flat exercises in a single unnamed section
+  return [{ section: entry.type === "push" ? "Push" : "Pull", items: entry.exercises || [] }];
+}
+
+function buildCheckEl(completed) {
+  var chk = document.createElement("div");
+  chk.className = "item-check";
+  chk.style.cssText = "flex-shrink:0;margin-top:6px;cursor:pointer;";
+  chk.innerHTML = '<svg><polyline points="4 8 8 12 16 4"/></svg>';
+  if (completed) {
+    chk.style.background = "var(--check-green)";
+    chk.style.borderColor = "var(--check-green)";
+    chk.querySelector("svg").style.opacity = "1";
+    chk.querySelector("svg").style.transform = "scale(1)";
+  }
+  return chk;
+}
+
+function setCheckEl(chk, completed) {
+  if (completed) {
+    chk.style.background = "var(--check-green)"; chk.style.borderColor = "var(--check-green)";
+    chk.querySelector("svg").style.opacity = "1"; chk.querySelector("svg").style.transform = "scale(1)";
+  } else {
+    chk.style.background = ""; chk.style.borderColor = "";
+    chk.querySelector("svg").style.opacity = "0"; chk.querySelector("svg").style.transform = "scale(0.5)";
+  }
+}
+
+// --- HISTORY ---
 function renderHistory() {
   var list = document.getElementById("history-list");
   list.innerHTML = "";
@@ -543,113 +583,109 @@ function renderHistory() {
       var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
       var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       var dateStr = days[d.getDay()] + ", " + months[d.getMonth()] + " " + d.getDate();
-      var hrs = d.getHours();
-      var mins = d.getMinutes();
-      var ampm = hrs >= 12 ? "PM" : "AM";
-      hrs = hrs % 12;
-      if (hrs === 0) hrs = 12;
+      var hrs = d.getHours(); var mins = d.getMinutes();
+      var ampm = hrs >= 12 ? "PM" : "AM"; hrs = hrs % 12; if (hrs === 0) hrs = 12;
       var timeStr = hrs + ":" + (mins < 10 ? "0" : "") + mins + " " + ampm;
 
       var div = document.createElement("div");
       div.className = "history-entry";
 
+      // Header (shared by both modes)
+      var hdr = document.createElement("div");
+      hdr.className = "history-header";
+      var hdrLeft = '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
+      var hdrRight = '<span class="history-date">' + dateStr + ' - ' + timeStr;
+      if (editingHistoryIdx !== idx) {
+        hdrRight += ' <button class="history-edit-btn" onclick="editHistory(' + idx + ')">Edit</button>';
+      }
+      hdrRight += ' <button class="history-delete" onclick="deleteHistory(' + idx + ')">x</button></span>';
+      hdr.innerHTML = hdrLeft + hdrRight;
+      div.appendChild(hdr);
+
+      var secs = getEntrySections(entry);
+
       if (editingHistoryIdx === idx) {
         // --- EDIT MODE ---
-        var editState = entry.exercises.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; });
-
-        var hdr = document.createElement("div");
-        hdr.className = "history-header";
-        hdr.innerHTML = '<span class="history-type ' + entry.type + '">' + entry.type + '</span>' +
-          '<span class="history-date">' + dateStr + ' - ' + timeStr + '</span>';
-        div.appendChild(hdr);
-
-        var exList = document.createElement("div");
-        exList.className = "history-exercises";
-
-        editState.forEach(function(ex, j) {
-          (function(state, jj) {
-            var row = document.createElement("div");
-            row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;";
-
-            // Checkbox toggle
-            var chk = document.createElement("div");
-            chk.className = "item-check";
-            chk.style.cssText = "flex-shrink:0;margin-top:6px;cursor:pointer;";
-            chk.innerHTML = '<svg><polyline points="4 8 8 12 16 4"/></svg>';
-            if (state[jj].completed) {
-              chk.style.background = "var(--check-green)";
-              chk.style.borderColor = "var(--check-green)";
-              chk.querySelector("svg").style.opacity = "1";
-              chk.querySelector("svg").style.transform = "scale(1)";
-            }
-            chk.onclick = function() {
-              state[jj].completed = !state[jj].completed;
-              if (state[jj].completed) {
-                chk.style.background = "var(--check-green)"; chk.style.borderColor = "var(--check-green)";
-                chk.querySelector("svg").style.opacity = "1"; chk.querySelector("svg").style.transform = "scale(1)";
-              } else {
-                chk.style.background = ""; chk.style.borderColor = "";
-                chk.querySelector("svg").style.opacity = "0"; chk.querySelector("svg").style.transform = "scale(0.5)";
-              }
-            };
-
-            // Inputs
-            var inputs = document.createElement("div");
-            inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.3rem;";
-
-            var nameInp = document.createElement("input");
-            nameInp.type = "text";
-            nameInp.value = state[jj].name;
-            nameInp.placeholder = "Exercise name";
-            nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
-            nameInp.oninput = function() { state[jj].name = nameInp.value; };
-
-            var detailInp = document.createElement("input");
-            detailInp.type = "text";
-            detailInp.value = state[jj].detail;
-            detailInp.placeholder = "Notes / weight";
-            detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.35rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
-            detailInp.oninput = function() { state[jj].detail = detailInp.value; };
-
-            inputs.appendChild(nameInp);
-            inputs.appendChild(detailInp);
-            row.appendChild(chk);
-            row.appendChild(inputs);
-            exList.appendChild(row);
-          })(editState, j);
+        // Deep-copy sections for editing
+        var editSections = secs.map(function(sec) {
+          return {
+            section: sec.section,
+            items: sec.items.map(function(ex) { return { name: ex.name, detail: ex.detail, completed: ex.completed }; })
+          };
         });
-        div.appendChild(exList);
+
+        editSections.forEach(function(sec) {
+          var secTitle = document.createElement("div");
+          secTitle.className = "section-title";
+          secTitle.textContent = sec.section;
+          // match workout view accent using entry type
+          secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
+          secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
+          secTitle.style.marginTop = "0.6rem";
+          div.appendChild(secTitle);
+
+          sec.items.forEach(function(ex, j) {
+            (function(item, jj) {
+              var row = document.createElement("div");
+              row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;";
+
+              var chk = buildCheckEl(item.completed);
+              chk.onclick = function() {
+                item.completed = !item.completed;
+                setCheckEl(chk, item.completed);
+              };
+
+              var inputs = document.createElement("div");
+              inputs.style.cssText = "flex:1;display:flex;flex-direction:column;gap:0.3rem;";
+
+              var nameInp = document.createElement("input");
+              nameInp.type = "text"; nameInp.value = item.name; nameInp.placeholder = "Exercise name";
+              nameInp.style.cssText = "font-family:var(--font);font-size:0.88rem;padding:0.4rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text);outline:none;width:100%;";
+              nameInp.oninput = function() { item.name = nameInp.value; };
+
+              var detailInp = document.createElement("input");
+              detailInp.type = "text"; detailInp.value = item.detail; detailInp.placeholder = "Notes / weight";
+              detailInp.style.cssText = "font-family:var(--font);font-size:0.8rem;padding:0.35rem 0.55rem;border:1px solid var(--card-border);border-radius:7px;background:var(--input-bg);color:var(--text-dim);outline:none;width:100%;";
+              detailInp.oninput = function() { item.detail = detailInp.value; };
+
+              inputs.appendChild(nameInp);
+              inputs.appendChild(detailInp);
+              row.appendChild(chk);
+              row.appendChild(inputs);
+              div.appendChild(row);
+            })(item, j);
+          });
+        });
 
         var actions = document.createElement("div");
         actions.className = "history-edit-actions";
+        actions.style.marginTop = "0.75rem";
 
         var saveBtn = document.createElement("button");
-        saveBtn.className = "hist-save-btn";
-        saveBtn.textContent = "Save";
-        saveBtn.onclick = (function(i2, state) {
+        saveBtn.className = "hist-save-btn"; saveBtn.textContent = "Save";
+        saveBtn.onclick = (function(i2, eSecs) {
           return function() {
-            var done = state.filter(function(e) { return e.completed; }).length;
-            historyData[i2].exercises = state;
+            var allItems = [];
+            var done = 0;
+            eSecs.forEach(function(s) { s.items.forEach(function(ex) { allItems.push(ex); if (ex.completed) done++; }); });
+            historyData[i2].sections = eSecs;
+            historyData[i2].exercises = allItems;
             historyData[i2].completed = done;
             editingHistoryIdx = null;
             renderHistory();
             saveToFirebase();
             showToast("History updated!");
           };
-        })(idx, editState);
+        })(idx, editSections);
 
         var cancelBtn = document.createElement("button");
-        cancelBtn.className = "hist-cancel-btn";
-        cancelBtn.textContent = "Cancel";
+        cancelBtn.className = "hist-cancel-btn"; cancelBtn.textContent = "Cancel";
         cancelBtn.onclick = function() { editingHistoryIdx = null; renderHistory(); };
 
         var deleteBtn = document.createElement("button");
-        deleteBtn.className = "history-delete";
-        deleteBtn.textContent = "Delete";
+        deleteBtn.className = "history-delete"; deleteBtn.textContent = "Delete";
         deleteBtn.style.marginLeft = "auto";
-        deleteBtn.onclick = (function(i2) {
-          return function() { deleteHistory(i2); };
-        })(idx);
+        deleteBtn.onclick = (function(i2) { return function() { deleteHistory(i2); }; })(idx);
 
         actions.appendChild(saveBtn);
         actions.appendChild(cancelBtn);
@@ -658,23 +694,35 @@ function renderHistory() {
 
       } else {
         // --- VIEW MODE ---
-        var completedCount = entry.exercises.filter(function(e) { return e.completed; }).length;
-        var html = '<div class="history-header">';
-        html += '<span class="history-type ' + entry.type + '">' + entry.type + '</span>';
-        html += '<span class="history-date">' + dateStr + ' - ' + timeStr;
-        html += ' <button class="history-edit-btn" onclick="editHistory(' + idx + ')">Edit</button>';
-        html += ' <button class="history-delete" onclick="deleteHistory(' + idx + ')">x</button></span>';
-        html += '</div>';
-        html += '<div class="history-stats">' + completedCount + ' / ' + entry.total + ' completed</div>';
-        html += '<div class="history-exercises">';
-        for (var j = 0; j < entry.exercises.length; j++) {
-          var ex = entry.exercises[j];
-          var icon = ex.completed ? '<span class="history-ex-check">&#10003;</span>' : '<span class="history-ex-miss">&#9675;</span>';
-          var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
-          html += '<div class="history-ex">' + icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail + '</div>';
-        }
-        html += '</div>';
-        div.innerHTML = html;
+        var allExercises = [];
+        secs.forEach(function(s) { s.items.forEach(function(ex) { allExercises.push(ex); }); });
+        var completedCount = allExercises.filter(function(e) { return e.completed; }).length;
+
+        var statsEl = document.createElement("div");
+        statsEl.className = "history-stats";
+        statsEl.style.marginBottom = "0.5rem";
+        statsEl.textContent = completedCount + " / " + (entry.total || allExercises.length) + " completed";
+        div.appendChild(statsEl);
+
+        secs.forEach(function(sec) {
+          var secTitle = document.createElement("div");
+          secTitle.className = "section-title";
+          secTitle.textContent = sec.section;
+          secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
+          secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
+          secTitle.style.marginBottom = "0.35rem";
+          div.appendChild(secTitle);
+
+          var exDiv = document.createElement("div");
+          exDiv.className = "history-exercises";
+          exDiv.style.marginBottom = "0.4rem";
+          sec.items.forEach(function(ex) {
+            var icon = ex.completed ? '<span class="history-ex-check">&#10003;</span>' : '<span class="history-ex-miss">&#9675;</span>';
+            var detail = ex.detail ? ' <span class="history-ex-detail">- ' + esc(ex.detail) + '</span>' : '';
+            exDiv.innerHTML += '<div class="history-ex">' + icon + ' <span class="history-ex-name">' + esc(ex.name) + '</span>' + detail + '</div>';
+          });
+          div.appendChild(exDiv);
+        });
       }
 
       list.appendChild(div);
@@ -687,10 +735,8 @@ function renderHistory() {
     clearBtn.textContent = "Clear All History";
     clearBtn.onclick = function() {
       if (confirm("Clear all workout history?")) {
-        historyData = [];
-        editingHistoryIdx = null;
-        renderHistory();
-        saveToFirebase();
+        historyData = []; editingHistoryIdx = null;
+        renderHistory(); saveToFirebase();
       }
     };
     list.appendChild(clearBtn);
