@@ -448,6 +448,7 @@ function buildEditRow(wk, si, ii, item) {
     workoutData[wk][si].items[ii].detail = inp2.value;
     editingItem = null;
     renderWorkout(wk);
+    saveToFirebase();
     showToast("Saved!");
   };
 
@@ -459,6 +460,7 @@ function buildEditRow(wk, si, ii, item) {
     }
     editingItem = null;
     renderWorkout(wk);
+    saveToFirebase();
   };
 
   var deleteBtn = document.createElement("button");
@@ -467,6 +469,7 @@ function buildEditRow(wk, si, ii, item) {
     workoutData[wk][si].items.splice(ii, 1);
     editingItem = null;
     renderWorkout(wk);
+    saveToFirebase();
   };
 
   actions.appendChild(saveBtn);
@@ -496,6 +499,7 @@ function renderBottomBar(wk) {
 function resetChecks() {
   checkedState[currentView] = [];
   renderWorkout(currentView);
+  saveToFirebase();
 }
 
 // --- END WORKOUT ---
@@ -654,7 +658,7 @@ function renderHistory() {
           secTitle.style.marginBottom = "0.5rem";
           div.appendChild(secTitle);
 
-          sec.items.forEach(function(ex, j) {
+          sec.items.forEach(function(item, j) {
             (function(item, jj) {
               var row = document.createElement("div");
               row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.5rem;";
