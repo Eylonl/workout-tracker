@@ -663,10 +663,12 @@ function renderHistory() {
 
       var secs = getEntrySections(entry);
 
-      var workoutTitle = document.createElement("div");
-      workoutTitle.className = "history-workout-title " + entry.type;
-      workoutTitle.textContent = (entry.type === "push" ? "Push" : "Pull") + " Workout";
-      div.appendChild(workoutTitle);
+      if (editingHistoryIdx !== idx) {
+        var workoutTitle = document.createElement("div");
+        workoutTitle.className = "history-workout-title " + entry.type;
+        workoutTitle.textContent = (entry.type === "push" ? "Push" : "Pull") + " Workout";
+        div.appendChild(workoutTitle);
+      }
 
       if (editingHistoryIdx === idx) {
         // --- EDIT MODE ---
