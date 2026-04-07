@@ -526,10 +526,8 @@ function endWorkout() {
   checkedState[wk] = [];
   renderWorkout(wk);
   showToast(wk.charAt(0).toUpperCase() + wk.slice(1) + " workout saved!");
-
-  saveToFirebase(function() {
-    switchView("history");
-  });
+  switchView("history");
+  saveToFirebase();
 }
 
 // --- HISTORY HELPERS ---
@@ -598,7 +596,7 @@ function renderHistory() {
       if (editingHistoryIdx !== idx) {
         hdrRight += ' <button class="history-edit-btn" onclick="editHistory(' + idx + ')">Edit</button>';
       }
-      hdrRight += ' <button class="history-delete" onclick="deleteHistory(' + idx + ')">x</button></span>';
+      hdrRight += ' <button class="history-delete" onclick="confirmDeleteHistory(' + idx + ')">x</button></span>';
       hdr.innerHTML = hdrLeft + hdrRight;
       div.appendChild(hdr);
 
@@ -614,14 +612,14 @@ function renderHistory() {
           };
         });
 
-        editSections.forEach(function(sec) {
+        editSections.forEach(function(sec, secIdx) {
           var secTitle = document.createElement("div");
           secTitle.className = "section-title";
           secTitle.textContent = sec.section;
-          // match workout view accent using entry type
           secTitle.style.color = entry.type === "push" ? "var(--push-accent)" : "var(--pull-accent)";
           secTitle.style.background = entry.type === "push" ? "var(--push-glow)" : "var(--pull-glow)";
-          secTitle.style.marginTop = "0.6rem";
+          secTitle.style.marginTop = secIdx === 0 ? "0.5rem" : "1rem";
+          secTitle.style.marginBottom = "0.5rem";
           div.appendChild(secTitle);
 
           sec.items.forEach(function(ex, j) {
@@ -685,7 +683,7 @@ function renderHistory() {
         var deleteBtn = document.createElement("button");
         deleteBtn.className = "history-delete"; deleteBtn.textContent = "Delete";
         deleteBtn.style.marginLeft = "auto";
-        deleteBtn.onclick = (function(i2) { return function() { deleteHistory(i2); }; })(idx);
+        deleteBtn.onclick = (function(i2) { return function() { confirmDeleteHistory(i2); }; })(idx);
 
         actions.appendChild(saveBtn);
         actions.appendChild(cancelBtn);
@@ -746,6 +744,12 @@ function renderHistory() {
 function editHistory(i) {
   editingHistoryIdx = i;
   renderHistory();
+}
+
+function confirmDeleteHistory(i) {
+  if (confirm("Delete this workout? This can't be undone.")) {
+    deleteHistory(i);
+  }
 }
 
 function deleteHistory(i) {
