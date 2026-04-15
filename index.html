@@ -179,6 +179,8 @@ function addUser(name) {
   if (!name || USERS.indexOf(name) !== -1) return;
   USERS.push(name);
   saveUsers();
+  // Pre-populate blank workout template so they don't inherit Eylon's data
+  db.ref("users/" + name + "/workouts").set(JSON.parse(JSON.stringify(blankData)));
   switchUser(name);
 }
 
@@ -256,6 +258,20 @@ var defaultData = {
       { name: "Tibia Stretch on Wall", detail: "" },
       { name: "Roller", detail: "" }
     ]}
+  ]
+};
+
+// Blank template for new users — section headers only, no exercises
+var blankData = {
+  push: [
+    { section: "Warm-Up", items: [] },
+    { section: "Push Exercises", items: [] },
+    { section: "Post", items: [] }
+  ],
+  pull: [
+    { section: "Warm-Up", items: [] },
+    { section: "Pull Exercises", items: [] },
+    { section: "Post", items: [] }
   ]
 };
 
