@@ -432,7 +432,7 @@ function loadFromFirebase() {
     setSyncStatus("connected");
     switchView("push");
   }).catch(function(err) {
-    dbg("LOAD ERROR: " + err.message);
+    console.error("Firebase load error:", err);
     setSyncStatus("error");
     switchView("push");
   });
@@ -544,7 +544,7 @@ function showManageUsers() {
     removeBtn.textContent = "Remove";
     removeBtn.disabled = name === currentUser;
     removeBtn.onclick = function() {
-      if (confirm("Remove user "" + name + ""? Their workout data will remain in the database.")) {
+      if (confirm("Remove user '" + name + "'? Their workout data will remain in the database.")) {
         document.body.removeChild(overlay);
         removeUser(name);
       }
