@@ -912,29 +912,65 @@ function setCheckEl(chk, completed) {
 // --- HISTORY ---
 function exportHistoryToCSV(userName, data) {
   if (!data || data.length === 0) { showToast("No history to export"); return; }
-  var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  var rows = [["Date", "Day", "Time", "Type", "Section", "Exercise", "Notes", "Completed"]];
-  data.forEach(function(entry) {
-    var d = new Date(entry.date);
+
+  var DAYS   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  var now = new Date();
+  var exportDate = MONTHS[now.getMonth()] + " " + now.getDate() + ", " + now.getFullYear();
+
+  var rows = [];
+
+  // ── Metadata header ──────────────────────────────────────────
+  rows.push(["Workout History", userName]);
+  rows.push(["Exported",        exportDate]);
+  rows.push(["Total Sessions",  data.length]);
+  rows.push([]); // blank separator
+
+  // ── Column headers ───────────────────────────────────────────
+  rows.push(["Date", "Day", "Time", "Type", "Completion", "Section", "Exercise", "Notes", "Done"]);
+
+  // ── Session rows ─────────────────────────────────────────────
+  data.forEach(function(entry, entryIdx) {
+    var d       = new Date(entry.date);
     var dateStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
-    var hrs = d.getHours(), mins = d.getMinutes();
-    var ampm = hrs >= 12 ? "PM" : "AM"; hrs = hrs % 12; if (!hrs) hrs = 12;
+    var hrs     = d.getHours(), mins = d.getMinutes();
+    var ampm    = hrs >= 12 ? "PM" : "AM"; hrs = hrs % 12; if (!hrs) hrs = 12;
     var timeStr = hrs + ":" + (mins < 10 ? "0" : "") + mins + " " + ampm;
-    var type = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
-    getEntrySections(entry).forEach(function(sec) {
+    var type    = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
+
+    var secs       = getEntrySections(entry);
+    var allItems   = [];
+    secs.forEach(function(s) { s.items.forEach(function(ex) { allItems.push(ex); }); });
+    var completed  = allItems.filter(function(e) { return e.completed; }).length;
+    var completion = completed + " / " + allItems.length;
+
+    // Session summary row
+    rows.push([dateStr, DAYS[d.getDay()], timeStr, type, completion, "", "", "", ""]);
+
+    // Exercise rows — date columns left blank for visual grouping
+    secs.forEach(function(sec) {
       sec.items.forEach(function(ex) {
-        rows.push([dateStr, days[d.getDay()], timeStr, type, sec.section, ex.name, ex.detail || "", ex.completed ? "Yes" : "No"]);
+        rows.push(["", "", "", "", "", sec.section, ex.name, ex.detail || "", ex.completed ? "Yes" : "No"]);
       });
     });
+
+    // Blank line between sessions
+    if (entryIdx < data.length - 1) rows.push([]);
   });
-  var csv = rows.map(function(row) {
-    return row.map(function(cell) {
-      var s = String(cell);
-      return (s.indexOf(",") !== -1 || s.indexOf('"') !== -1) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(",");
-  }).join("\n");
+
+  // ── Serialise ────────────────────────────────────────────────
+  function csvCell(cell) {
+    var s = String(cell === undefined ? "" : cell);
+    return (s.indexOf(",") !== -1 || s.indexOf('"') !== -1 || s.indexOf("\n") !== -1)
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  }
+  var csv = rows.map(function(row) { return row.map(csvCell).join(","); }).join("\n");
+
+  // UTF-8 BOM so Excel opens it without encoding issues
   var a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }));
   a.download = userName + "_workout_history.csv";
   a.click();
   showToast("Exported!");
