@@ -108,6 +108,9 @@
 .history-workout-title.push { color: var(--push-accent); }
 .history-workout-title.pull { color: var(--pull-accent); }
   .clear-history { display: block; margin: 1rem auto; font-weight: 700; font-size: 0.8rem; padding: 0.5rem 1.2rem; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card); color: var(--danger); cursor: pointer; }
+  .history-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+  .export-btn { font-weight: 600; font-size: 0.78rem; padding: 0.35rem 0.85rem; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card); color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 0.35rem; }
+  .export-btn:hover { border-color: var(--check-green); color: var(--check-green); }
   .toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--check-green); color: var(--bg); font-weight: 700; padding: 0.7rem 1.5rem; border-radius: 10px; font-size: 0.85rem; opacity: 0; transition: all 0.35s ease; pointer-events: none; z-index: 99; }
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   .user-toggle { display: flex; justify-content: center; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
@@ -198,6 +201,7 @@ function removeUser(name) {
   if (idx === -1) return;
   USERS.splice(idx, 1);
   saveUsers();
+  db.ref("users/" + name).remove(); // delete all their Firebase data
   if (currentUser === name) {
     currentUser = USERS[0];
     localStorage.setItem("selectedUser", currentUser);
@@ -539,17 +543,44 @@ function showManageUsers() {
     nameEl.textContent = name + (name === currentUser ? " (active)" : "");
     row.appendChild(nameEl);
 
+    var actions = document.createElement("div");
+    actions.style.cssText = "display:flex;gap:0.4rem;";
+
+    var exportBtn = document.createElement("button");
+    exportBtn.className = "export-btn";
+    exportBtn.textContent = "Export CSV";
+    (function(n) {
+      exportBtn.onclick = function() {
+        if (n === currentUser) {
+          exportHistoryToCSV(n, historyData);
+        } else {
+          exportBtn.textContent = "Loading...";
+          exportBtn.disabled = true;
+          db.ref("users/" + n + "/history").once("value").then(function(snap) {
+            exportHistoryToCSV(n, normalizeHistory(snap.val()));
+            exportBtn.textContent = "Export CSV";
+            exportBtn.disabled = false;
+          });
+        }
+      };
+    })(name);
+    actions.appendChild(exportBtn);
+
     var removeBtn = document.createElement("button");
     removeBtn.className = "modal-remove-btn";
     removeBtn.textContent = "Remove";
     removeBtn.disabled = name === currentUser;
-    removeBtn.onclick = function() {
-      if (confirm("Remove user '" + name + "'? Their workout data will remain in the database.")) {
-        document.body.removeChild(overlay);
-        removeUser(name);
-      }
-    };
-    row.appendChild(removeBtn);
+    (function(n) {
+      removeBtn.onclick = function() {
+        if (confirm("Remove user '" + n + "'? This will permanently delete all their workout data.")) {
+          document.body.removeChild(overlay);
+          removeUser(n);
+        }
+      };
+    })(name);
+    actions.appendChild(removeBtn);
+
+    row.appendChild(actions);
     modal.appendChild(row);
   });
 
@@ -879,6 +910,36 @@ function setCheckEl(chk, completed) {
 }
 
 // --- HISTORY ---
+function exportHistoryToCSV(userName, data) {
+  if (!data || data.length === 0) { showToast("No history to export"); return; }
+  var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  var rows = [["Date", "Day", "Time", "Type", "Section", "Exercise", "Notes", "Completed"]];
+  data.forEach(function(entry) {
+    var d = new Date(entry.date);
+    var dateStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    var hrs = d.getHours(), mins = d.getMinutes();
+    var ampm = hrs >= 12 ? "PM" : "AM"; hrs = hrs % 12; if (!hrs) hrs = 12;
+    var timeStr = hrs + ":" + (mins < 10 ? "0" : "") + mins + " " + ampm;
+    var type = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
+    getEntrySections(entry).forEach(function(sec) {
+      sec.items.forEach(function(ex) {
+        rows.push([dateStr, days[d.getDay()], timeStr, type, sec.section, ex.name, ex.detail || "", ex.completed ? "Yes" : "No"]);
+      });
+    });
+  });
+  var csv = rows.map(function(row) {
+    return row.map(function(cell) {
+      var s = String(cell);
+      return (s.indexOf(",") !== -1 || s.indexOf('"') !== -1) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(",");
+  }).join("\n");
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = userName + "_workout_history.csv";
+  a.click();
+  showToast("Exported!");
+}
+
 function renderHistory() {
   var list = document.getElementById("history-list");
   list.innerHTML = "";
